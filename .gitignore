@@ -1,6 +1,11 @@
 
 # Created by https://www.gitignore.io/api/lua,java,python,pycharm,eclipse
 
+### Temp ###
+.idea/
+LanguageModels/
+data/
+
 ### Eclipse ###
 
 .metadata
