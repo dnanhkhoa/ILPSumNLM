@@ -4,7 +4,11 @@
 ### Temp ###
 .idea/
 LanguageModels/
-data/
+Datasets/
+Resources/
+Temp/
+Tools/
+VirtualEnv/
 
 ### Eclipse ###
 
