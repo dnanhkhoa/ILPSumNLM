@@ -1,10 +1,11 @@
 #!/usr/bin/python
 # -*- coding: utf8 -*-
-
 import json
 import os
 
 import requests
+
+from utils.configs import *
 
 DEBUG = True
 
@@ -60,6 +61,26 @@ def write_lines(lines, file_name, end_line='\n'):
             debug(e)
 
 
+def read_file(file_name):
+    file_name = full_path(file_name)
+    assert path_info(file_name) == 1, 'File does not exist!'
+    with open(file_name, 'rb') as f:
+        try:
+            return f.read().decode('UTF-8')
+        except Exception as e:
+            debug(e)
+
+
+def write_file(data, file_name):
+    file_name = full_path(file_name)
+    make_dirs(os.path.dirname(file_name))
+    with open(file_name, 'wb') as f:
+        try:
+            f.write(data.encode('UTF-8'))
+        except Exception as e:
+            debug(e)
+
+
 def read_json(file_name):
     file_name = full_path(file_name)
     assert path_info(file_name) == 1, 'File does not exist!'
@@ -82,8 +103,8 @@ def write_json(obj, file_name):
 
 def parse(docs, lang='en'):
     try:
-        server_url = 'http://127.0.0.1'
-        server_port = 5100 if lang is 'en' else 5105
+        server_url = 'http://%s' % (CORE_NLP_IP if lang is 'en' else VN_NLP_IP)
+        server_port = CORE_NLP_PORT if lang is 'en' else VN_NLP_PORT
         data = {'text': [doc.encode('UTF-8') for doc in docs] if isinstance(docs, list) else docs.encode('UTF-8')}
         response = requests.post(url='%s:%d/handle' % (server_url, server_port), data=data)
         if response.status_code == 200:
@@ -94,3 +115,31 @@ def parse(docs, lang='en'):
     except Exception as e:
         debug(e)
     return None
+
+
+def read_dir(dir_path, dir_filter=False, file_filter=False, ext_filter=None):
+    full_dir_path = full_path(dir_path)
+    assert path_info(full_dir_path) == 0, 'Folder does not exist!'
+
+    paths = []
+    files = []
+
+    try:
+        for file in os.listdir(full_dir_path):
+            file_path = '%s/%s' % (dir_path, file)
+            full_file_path = full_path(file_path)
+            file_info = path_info(full_file_path)
+            if file_info == 1:  # File
+                parts = os.path.splitext(file)
+                if not file_filter and (ext_filter is None or parts[1] not in ext_filter):
+                    files.append(file)
+                    paths.append(file_path)
+            elif file_info == 0:  # Folder
+                if not dir_filter:
+                    files.append(file)
+                    paths.append(file_path)
+
+    except Exception as e:
+        debug(e)
+
+    return files, paths
