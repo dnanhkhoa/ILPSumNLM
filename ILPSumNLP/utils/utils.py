@@ -5,8 +5,6 @@ import os
 
 import requests
 
-from utils.configs import *
-
 DEBUG = True
 
 APP_PATH = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir))
@@ -103,10 +101,10 @@ def write_json(obj, file_name):
 
 def parse(docs, lang='en'):
     try:
-        server_url = 'http://%s' % (CORE_NLP_IP if lang is 'en' else VN_NLP_IP)
-        server_port = CORE_NLP_PORT if lang is 'en' else VN_NLP_PORT
+        server_url = '0.0.0.0'
+        server_port = 5100 if lang is 'en' else 5105
         data = {'text': [doc.encode('UTF-8') for doc in docs] if isinstance(docs, list) else docs.encode('UTF-8')}
-        response = requests.post(url='%s:%d/handle' % (server_url, server_port), data=data)
+        response = requests.post(url='http://%s:%d/handle' % (server_url, server_port), data=data)
         if response.status_code == 200:
             result = json.loads(response.content.decode('UTF-8'))
             if not result.get('status', False):
