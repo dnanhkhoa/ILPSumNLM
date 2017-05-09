@@ -6,6 +6,9 @@ import stat
 from utils.normalizer import *
 from utils.utils import *
 
+# preprocess_duc04('../Datasets/DUC04', '../Temp/datasets/en')
+# preprocess_vimds('../Datasets/VietnameseMDS', '../Temp/datasets/vi')
+
 ROUGE_PATH = full_path('../Tools/rouge-1.5.5')
 ROUGE_2_CSV_PATH = full_path('../Tools/rouge2csv')
 BLEU_PATH = full_path('../Tools/bleu-kit-1.05/scripts')
