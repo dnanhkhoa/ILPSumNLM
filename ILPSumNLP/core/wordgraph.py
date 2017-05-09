@@ -188,6 +188,9 @@ class WordGraph:
         # Replacing default values for French
         if lang == "fr":
             self.verbs = set(['V', 'VPP', 'VINF'])
+        elif lang == "vi":
+            # Replacing default values for Vietnamese
+            self.verbs = set(['V'])
 
         # 1. Pre-process the sentences
         self.pre_process_sentences()
