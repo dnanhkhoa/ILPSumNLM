@@ -3,8 +3,6 @@
 
 import stat
 
-import regex
-
 from utils.normalizer import *
 from utils.utils import *
 
@@ -95,25 +93,35 @@ def preprocess_duc04(dir_path, save_path):
     make_dirs(peers_dir_path)
 
     config = {}
+    packed = {}
 
     ref_docs, refs_path = read_dir('%s/models' % dir_path, dir_filter=True)
 
     clusters, clusters_path = read_dir('%s/docs' % dir_path, file_filter=True)
 
     for i, cluster in enumerate(clusters):
+        cluster_name = 'cluster_%d' % (i + 1)
+
         # Config
-        config['cluster_%d' % (i + 1)] = {'models': [], 'peers': ['1']}
+        config[cluster_name] = {'models': [], 'peers': ['1']}
+
+        # Pack
+        packed[cluster_name] = {'docs': [], 'path': '%s/%s/1' % (peers_dir_path, cluster_name)}
 
         # Docs
         docs, docs_path = read_dir(clusters_path[i], dir_filter=True)
         for j, doc in enumerate(docs):
-            file_name = '%s/cluster_%d/%d' % (clusters_dir_path, i + 1, j + 1)
+            file_name = '%s/%s/%d' % (clusters_dir_path, cluster_name, j + 1)
             file_content = read_file(docs_path[j])
             matcher = content_pattern.search(file_content)
             if matcher is not None:
                 file_content = matcher.group(1)
+
                 # Preprocessing
-                write_file(normalize_dataset(file_content), file_name)
+                file_content = normalize_dataset(file_content)
+                packed[cluster_name]['docs'].append(file_content)
+
+                write_file(file_content, file_name)
 
                 docs_count += 1
 
@@ -121,18 +129,21 @@ def preprocess_duc04(dir_path, save_path):
         ref_id = 0
         for j, ref_doc in enumerate(ref_docs):
             if cluster.lower()[:-1] in ref_doc.lower():
-                config['cluster_%d' % (i + 1)]['models'].append(str(ref_id + 1))
+                config[cluster_name]['models'].append(str(ref_id + 1))
 
-                file_name = '%s/cluster_%d/%d' % (models_dir_path, i + 1, ref_id + 1)
+                file_name = '%s/%s/%d' % (models_dir_path, cluster_name, ref_id + 1)
                 file_content = read_file(refs_path[j])
+
                 # Preprocessing
                 write_file(normalize_dataset(file_content), file_name)
+
                 ref_id += 1
                 refs_count += 1
 
     assert docs_count == num_docs, 'There should be the same number of docs in clusters'
     assert refs_count == num_refs, 'There should be the same number of reference documents in clusters'
 
+    write_json(packed, '%s/packed.json' % save_path)
     make_rouge_script(config, 'peers', 'models', save_path)
     make_bleu_script(config, 'peers', 'models', save_path)
 
@@ -150,12 +161,18 @@ def preprocess_vimds(dir_path, save_path):
     make_dirs(peers_dir_path)
 
     config = {}
+    packed = {}
 
     clusters, clusters_path = read_dir(dir_path, file_filter=True)
 
     for i, cluster in enumerate(clusters):
+        cluster_name = 'cluster_%d' % (i + 1)
+
         # Config
-        config['cluster_%d' % (i + 1)] = {'models': [], 'peers': ['1']}
+        config[cluster_name] = {'models': [], 'peers': ['1']}
+
+        # Pack
+        packed[cluster_name] = {'docs': [], 'path': '%s/%s/1' % (peers_dir_path, cluster_name)}
 
         # Docs
         docs, docs_path = read_dir(clusters_path[i], dir_filter=True)
@@ -168,23 +185,31 @@ def preprocess_vimds(dir_path, save_path):
             if '.body.txt' in doc_name:  # Doc
                 file_name = '%s/cluster_%d/%d' % (clusters_dir_path, i + 1, doc_id + 1)
                 file_content = read_file(docs_path[j])
+
                 # Preprocessing
-                write_file(normalize_dataset(file_content), file_name)
+                file_content = normalize_dataset(file_content, lang='vi')
+                packed[cluster_name]['docs'].append(file_content)
+
+                write_file(file_content, file_name)
+
                 doc_id += 1
                 docs_count += 1
 
             elif '.ref' in doc_name and '.tok' not in doc_name:  # Ref
-                config['cluster_%d' % (i + 1)]['models'].append(str(ref_id + 1))
+                config[cluster_name]['models'].append(str(ref_id + 1))
 
                 file_name = '%s/cluster_%d/%d' % (models_dir_path, i + 1, ref_id + 1)
                 file_content = read_file(docs_path[j])
+
                 # Preprocessing
-                write_file(normalize_dataset(file_content), file_name)
+                write_file(normalize_dataset(file_content, lang='vi'), file_name)
+
                 ref_id += 1
                 refs_count += 1
 
     assert docs_count == num_docs, 'There should be the same number of docs in clusters'
     assert refs_count == num_refs, 'There should be the same number of reference documents in clusters'
 
+    write_json(packed, '%s/packed.json' % save_path)
     make_rouge_script(config, 'peers', 'models', save_path)
     make_bleu_script(config, 'peers', 'models', save_path)
