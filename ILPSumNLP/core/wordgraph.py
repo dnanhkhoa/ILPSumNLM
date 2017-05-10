@@ -108,16 +108,16 @@
 import bisect
 import codecs
 import math
-import os
-import re
 
 import networkx as nx
+
+from utils import *
 
 
 # import matplotlib.pyplot as plt
 
 # ~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
-# [ Class word_graph
+# [ Class WordGraph
 # ~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 class WordGraph:
     """
@@ -148,14 +148,14 @@ class WordGraph:
         self.nb_words = nb_words
         """ The minimal number of words in the compression. """
 
-        self.resources = os.path.dirname(__file__) + '/resources/'
+        self.resources = full_path('../Resources')
         """ The path of the resources folder. """
 
-        self.stopword_path = self.resources + 'stopwords.' + lang + '.dat'
-        """ The path of the stopword list, e.g. stopwords.[lang].dat. """
+        self.stopword_path = '%s/stopwords/%s.txt' % (self.resources, lang)
+        """ The path of the stopword list."""
 
         self.stopwords = self.load_stopwords(self.stopword_path)
-        """ The set of stopwords loaded from stopwords.[lang].dat. """
+        """ The set of stopwords loaded from stopwords."""
 
         self.punct_tag = punct_tag
         """ The stopword tag used in the graph. """
@@ -214,7 +214,7 @@ class WordGraph:
         for i in range(self.length):
 
             # Normalise extra white spaces
-            self.sentence[i] = re.sub(' +', ' ', self.sentence[i])
+            self.sentence[i] = regex.sub(' +', ' ', self.sentence[i])
             self.sentence[i] = self.sentence[i].strip()
 
             # Tokenize the current sentence in word/POS
@@ -226,8 +226,8 @@ class WordGraph:
             # Looping over the words
             for w in sentence:
                 # Splitting word, POS
-                pos_separator_re = re.escape(self.pos_separator)
-                m = re.match("^(.+)" + pos_separator_re + "(.+)$", w)
+                pos_separator_re = regex.escape(self.pos_separator)
+                m = regex.match("^(.+)" + pos_separator_re + "(.+)$", w)
 
                 # Extract the word information
                 token, POS = m.group(1), m.group(2)
@@ -301,7 +301,7 @@ class WordGraph:
                 token, POS = self.sentence[i][j]
 
                 # If stopword or punctuation mark, continues
-                if token in self.stopwords or re.search('(?u)^\W$', token):
+                if token in self.stopwords or regex.search('(?u)^\W$', token):
                     continue
 
                 # Create the node identifier
@@ -349,7 +349,7 @@ class WordGraph:
                 token, POS = self.sentence[i][j]
 
                 # If stopword or punctuation mark, continues
-                if token in self.stopwords or re.search('(?u)^\W$', token):
+                if token in self.stopwords or regex.search('(?u)^\W$', token):
                     continue
 
                 # If word is not already mapped to a node
@@ -524,7 +524,7 @@ class WordGraph:
                 token, POS = self.sentence[i][j]
 
                 # If *NOT* punctuation mark, continues
-                if not re.search('(?u)^\W$', token):
+                if not regex.search('(?u)^\W$', token):
                     continue
 
                 # Create the node identifier
@@ -829,7 +829,7 @@ class WordGraph:
                         if tag in self.verbs:
                             nb_verbs += 1
                         # 2.
-                        if not re.search('(?u)^\W$', word):
+                        if not regex.search('(?u)^\W$', word):
                             length += 1
                         # 3.
                         else:
@@ -849,7 +849,7 @@ class WordGraph:
                                     length >= self.nb_words and \
                                     paired_parentheses == 0 and \
                                     (quotation_mark_number % 2) == 0 \
-                            and not sentence_container.has_key(raw_sentence):
+                            and raw_sentence not in sentence_container:
                         path = [node]
                         path.extend(shortestpath)
                         path.reverse()
@@ -862,7 +862,7 @@ class WordGraph:
                 else:
 
                     # test if node has already been visited
-                    if visited.has_key(node):
+                    if node in visited:
                         visited[node] += 1
                     else:
                         visited[node] = 0
@@ -958,7 +958,7 @@ class WordGraph:
                 node = token.lower() + self.sep + POS
 
                 # Add the token to the terms list
-                if not terms.has_key(node):
+                if node not in terms:
                     terms[node] = [i]
                 else:
                     terms[node].append(i)
@@ -983,7 +983,7 @@ class WordGraph:
 
         # For each line in the file
         for line in codecs.open(path, 'r', 'utf-8'):
-            if not re.search('^#', line) and len(line.strip()) > 0:
+            if not regex.search('^#', line) and len(line.strip()) > 0:
                 stopwords.add(line.strip().lower())
 
         # Return the set of stopwords
@@ -1000,7 +1000,7 @@ class WordGraph:
 
 
 # ~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
-# ] Ending word_graph class
+# ] Ending WordGraph class
 # ~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 
 
@@ -1111,7 +1111,7 @@ class keyphrase_reranker:
         for i in range(len(self.sentences)):
 
             # Normalise extra white spaces
-            self.sentences[i] = re.sub(' +', ' ', self.sentences[i])
+            self.sentences[i] = regex.sub(' +', ' ', self.sentences[i])
 
             # Tokenize the current sentence in word/POS
             sentence = self.sentences[i].split(' ')
@@ -1233,7 +1233,7 @@ class keyphrase_reranker:
         candidate_pattern = ''.join(u[1] for u in keyphrase_candidate)
 
         for pattern in self.syntactic_patterns:
-            if not re.search(pattern, candidate_pattern):
+            if not regex.search(pattern, candidate_pattern):
                 return False
 
         return True
@@ -1396,10 +1396,10 @@ class keyphrase_reranker:
                 non_redundant_keyphrases.append(keyphrase)
 
         # Modify the keyphrase candidate dictionnaries according to the clusters
-        for keyphrase in self.keyphrase_candidates.keys():
+        for keyphrase in list(self.keyphrase_candidates.keys()):
 
             # Remove candidate if not in cluster
-            if not keyphrase in non_redundant_keyphrases:
+            if keyphrase not in non_redundant_keyphrases:
                 del self.keyphrase_candidates[keyphrase]
                 del self.keyphrase_scores[keyphrase]
 
@@ -1447,8 +1447,8 @@ class keyphrase_reranker:
         """
 
         # Splitting word, POS using regex
-        pos_separator_re = re.escape(self.pos_separator)
-        m = re.match("^(.+)" + pos_separator_re + "(.+)$", word)
+        pos_separator_re = regex.escape(self.pos_separator)
+        m = regex.match("^(.+)" + pos_separator_re + "(.+)$", word)
 
         # Extract the word information
         token, POS = m.group(1), m.group(2)
