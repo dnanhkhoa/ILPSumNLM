@@ -7,8 +7,22 @@ import regex
 from utils.utils import *
 
 
-def remove_punctuation(sentence):
-    return sentence
+def is_punctuation(token):
+    return all(c in string.punctuation for c in token)
+
+
+def normalize_word_suffix(s, lang='en'):
+    if lang is 'en':
+        return regex.sub(r"\s+('m|'ll|'d|'s|n't)", '\g<1>', s, flags=regex.IGNORECASE)
+    return s
+
+
+def remove_punctuation(tokens):
+    normalized_tokens = []
+    for token in tokens:
+        if not is_punctuation(token):
+            normalized_tokens.append(token)
+    return normalized_tokens
 
 
 def normalize_special_chars(s):
@@ -32,6 +46,31 @@ def remove_invalid_chars(s):
 
 def normalize_sentence(sentence, lang='en'):
     return sentence
+
+
+def get_tagged_words(sentence):
+    pass
+
+
+def parse_docs(raw_docs, stemmer, lang='en'):
+    docs = []
+    for raw_doc in raw_docs:
+        doc = []
+
+        parsed_sentences = parse(raw_doc, lang)
+        for parsed_sentence in parsed_sentences:
+            sentence = {
+                'tokens': parsed_sentence['tokens'],
+                'tags': ['PUNCT' if is_punctuation(token) else parsed_sentence['tags'][i] for i, token in
+                         enumerate(parsed_sentence['tokens'])],
+                'lemmas': parsed_sentence['lemmas'] if lang is 'en' else parsed_sentence['tokens'],
+                'stemmer': [stemmer.stem(token) for token in
+                            parsed_sentence['tokens']] if lang is 'en' else parsed_sentence['tokens']
+            }
+            doc.append(sentence)
+
+        docs.append(doc)
+    return docs
 
 
 def normalize_dataset(doc, lang='en'):
