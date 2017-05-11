@@ -23,22 +23,22 @@ def chmod_exec(file_name):
 def make_rouge_script(config, peer_root, model_root, save_path):
     lines = ['<ROUGE_EVAL version="1.5.5">']
 
-    for k, v in config.items():
-        lines.append('\t<EVAL ID="%s">' % k)
+    for info in config:
+        lines.append('\t<EVAL ID="%s">' % info['cluster_name'])
 
         lines.append('\t\t<INPUT-FORMAT TYPE="SPL"></INPUT-FORMAT>')
-        lines.append('\t\t<MODEL-ROOT>%s/%s</MODEL-ROOT>' % (model_root, k))
-        lines.append('\t\t<PEER-ROOT>%s/%s</PEER-ROOT>' % (peer_root, k))
+        lines.append('\t\t<MODEL-ROOT>%s/%s</MODEL-ROOT>' % (model_root, info['cluster_name']))
+        lines.append('\t\t<PEER-ROOT>%s/%s</PEER-ROOT>' % (peer_root, info['cluster_name']))
 
         # Models
         lines.append('\t\t<MODELS>')
-        for model in v['models']:
-            lines.append('\t\t\t<M ID="%s">%s</M>' % (model, model))
+        for model in info['models']:
+            lines.append('\t\t\t<M ID="%s">%s</M>' % (model['model_name'], model['model_name']))
         lines.append('\t\t</MODELS>')
 
         # Peers
         lines.append('\t\t<PEERS>')
-        for peer in v['peers']:
+        for peer in info['peers']:
             lines.append('\t\t\t<P ID="%s">%s</P>' % (peer, peer))
         lines.append('\t\t</PEERS>')
 
@@ -66,10 +66,11 @@ def make_rouge_script(config, peer_root, model_root, save_path):
 def make_bleu_script(config, peer_root, model_root, save_path):
     lines = ['cmd="ruby %s/doc_bleu.rb --ngram 4"' % BLEU_PATH]
 
-    for k, v in config.items():
-        for peer in v['peers']:
-            for model in v['models']:
-                lines.append('$cmd "%s/%s/%s" "%s/%s/%s"' % (peer_root, k, peer, model_root, k, model))
+    for info in config:
+        for peer in info['peers']:
+            for model in info['models']:
+                lines.append('$cmd "%s/%s/%s" "%s/%s/%s"' % (
+                    peer_root, info['cluster_name'], peer, model_root, info['cluster_name'], model['model_name']))
                 lines.append('echo')
 
     # Write sh file
@@ -96,9 +97,7 @@ def preprocess_duc04(dir_path, save_path):
     peers_dir_path = '%s/peers' % save_path
     make_dirs(peers_dir_path)
 
-    mapping = {}
-    config = {}
-    packed = {}
+    data_info = []
 
     ref_docs, refs_path = read_dir('%s/models' % dir_path, dir_filter=True)
 
@@ -107,22 +106,13 @@ def preprocess_duc04(dir_path, save_path):
     for i, cluster in enumerate(clusters):
         cluster_name = 'cluster_%d' % (i + 1)
 
-        # Config
-        config[cluster_name] = {
-            'models': [],
-            'peers': ['1']
-        }
-
-        # Mapping
-        mapping[cluster_name] = {
-            'original_name': cluster,
-            'models': {}
-        }
-
-        # Pack
-        packed[cluster_name] = {
+        info = {
+            'cluster_name': cluster_name,
+            'original_cluster_name': cluster,
             'docs': [],
-            'path': '%s/%s/1' % (peers_dir_path, cluster_name)
+            'models': [],
+            'peers': ['1'],
+            'save': '%s/%s/1' % (peers_dir_path, cluster_name)
         }
 
         # Docs
@@ -136,7 +126,11 @@ def preprocess_duc04(dir_path, save_path):
 
                 # Preprocessing
                 file_content = normalize_dataset(file_content)
-                packed[cluster_name]['docs'].append(file_content)
+                info['docs'].append({
+                    'doc_name': str(j + 1),
+                    'original_name': doc,
+                    'content': file_content
+                })
 
                 write_file(file_content, file_name)
 
@@ -146,8 +140,10 @@ def preprocess_duc04(dir_path, save_path):
         ref_id = 0
         for j, ref_doc in enumerate(ref_docs):
             if cluster.lower()[:-1] in ref_doc.lower():
-                config[cluster_name]['models'].append(str(ref_id + 1))
-                mapping[cluster_name]['models'][ref_id + 1] = ref_doc
+                info['models'].append({
+                    'model_name': str(ref_id + 1),
+                    'original_name': ref_doc
+                })
 
                 file_name = '%s/%s/%d' % (models_dir_path, cluster_name, ref_id + 1)
                 file_content = read_file(refs_path[j])
@@ -158,13 +154,14 @@ def preprocess_duc04(dir_path, save_path):
                 ref_id += 1
                 refs_count += 1
 
+        data_info.append(info)
+
     assert docs_count == num_docs, 'There should be the same number of docs in clusters'
     assert refs_count == num_refs, 'There should be the same number of reference documents in clusters'
 
-    write_json(packed, '%s/packed.json' % save_path)
-    write_json(mapping, '%s/mapping.json' % save_path)
-    make_rouge_script(config, 'peers', 'models', save_path)
-    make_bleu_script(config, 'peers', 'models', save_path)
+    write_json(data_info, '%s/info.json' % save_path)
+    make_rouge_script(data_info, 'peers', 'models', save_path)
+    make_bleu_script(data_info, 'peers', 'models', save_path)
 
 
 def preprocess_vimds(dir_path, save_path):
@@ -179,31 +176,20 @@ def preprocess_vimds(dir_path, save_path):
     peers_dir_path = '%s/peers' % save_path
     make_dirs(peers_dir_path)
 
-    mapping = {}
-    config = {}
-    packed = {}
+    data_info = []
 
     clusters, clusters_path = read_dir(dir_path, file_filter=True)
 
     for i, cluster in enumerate(clusters):
         cluster_name = 'cluster_%d' % (i + 1)
 
-        # Config
-        config[cluster_name] = {
-            'models': [],
-            'peers': ['1']
-        }
-
-        # Mapping
-        mapping[cluster_name] = {
-            'original_name': cluster,
-            'models': {}
-        }
-
-        # Pack
-        packed[cluster_name] = {
+        info = {
+            'cluster_name': cluster_name,
+            'original_cluster_name': cluster,
             'docs': [],
-            'path': '%s/%s/1' % (peers_dir_path, cluster_name)
+            'models': [],
+            'peers': ['1'],
+            'save': '%s/%s/1' % (peers_dir_path, cluster_name)
         }
 
         # Docs
@@ -220,7 +206,11 @@ def preprocess_vimds(dir_path, save_path):
 
                 # Preprocessing
                 file_content = normalize_dataset(file_content, lang='vi')
-                packed[cluster_name]['docs'].append(file_content)
+                info['docs'].append({
+                    'doc_name': str(doc_id + 1),
+                    'original_name': doc,
+                    'content': file_content
+                })
 
                 write_file(file_content, file_name)
 
@@ -228,8 +218,10 @@ def preprocess_vimds(dir_path, save_path):
                 docs_count += 1
 
             elif '.ref' in doc_name and '.tok' not in doc_name:  # Ref
-                config[cluster_name]['models'].append(str(ref_id + 1))
-                mapping[cluster_name]['models'][ref_id + 1] = doc_name
+                info['models'].append({
+                    'model_name': str(ref_id + 1),
+                    'original_name': doc_name
+                })
 
                 file_name = '%s/cluster_%d/%d' % (models_dir_path, i + 1, ref_id + 1)
                 file_content = read_file(docs_path[j])
@@ -240,10 +232,11 @@ def preprocess_vimds(dir_path, save_path):
                 ref_id += 1
                 refs_count += 1
 
+        data_info.append(info)
+
     assert docs_count == num_docs, 'There should be the same number of docs in clusters'
     assert refs_count == num_refs, 'There should be the same number of reference documents in clusters'
 
-    write_json(packed, '%s/packed.json' % save_path)
-    write_json(mapping, '%s/mapping.json' % save_path)
-    make_rouge_script(config, 'peers', 'models', save_path)
-    make_bleu_script(config, 'peers', 'models', save_path)
+    write_json(data_info, '%s/info.json' % save_path)
+    make_rouge_script(data_info, 'peers', 'models', save_path)
+    make_bleu_script(data_info, 'peers', 'models', save_path)

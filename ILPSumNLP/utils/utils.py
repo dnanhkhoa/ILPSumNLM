@@ -125,7 +125,8 @@ def read_dir(dir_path, dir_filter=False, file_filter=False, ext_filter=None):
     files = []
 
     try:
-        for file in os.listdir(full_dir_path):
+        sorted_files = sorted(os.listdir(full_dir_path))
+        for file in sorted_files:
             file_path = '%s/%s' % (dir_path, file)
             full_file_path = full_path(file_path)
             file_info = path_info(full_file_path)
