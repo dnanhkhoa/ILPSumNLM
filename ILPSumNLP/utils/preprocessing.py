@@ -50,10 +50,11 @@ def make_rouge_script(config, peer_root, model_root, save_path):
     write_lines(lines, '%s/rouge_config.xml' % save_path)
 
     # Write sh file
+    # 'perl $rouge_file -e $data_path -a -d -c 95 -r 1000 -b 665 -n 2 -m -2 4 -u -f A -p 0.5 -t 0 '
     lines = [
         'rouge_file=%s/ROUGE-1.5.5.pl' % ROUGE_PATH,
         'data_path=%s/data' % ROUGE_PATH,
-        'perl $rouge_file -e $data_path -a -d -c 95 -r 1000 -b 665 -n 2 -m -2 4 -u -f A -p 0.5 -t 0 '
+        'perl $rouge_file -e $data_path -a -d -c 95 -r 1000 -n 2 -m -2 4 -u -f A -p 0.5 -t 0 '
         'rouge_config.xml >> ${1:-rouge_result.out}'
     ]
 
@@ -63,7 +64,7 @@ def make_rouge_script(config, peer_root, model_root, save_path):
 
 
 def make_bleu_script(config, peer_root, model_root, save_path):
-    lines = ['cmd="ruby %s/doc_bleu.rb"' % BLEU_PATH]
+    lines = ['cmd="ruby %s/doc_bleu.rb --ngram 4"' % BLEU_PATH]
 
     for k, v in config.items():
         for peer in v['peers']:
