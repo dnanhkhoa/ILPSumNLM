@@ -31,6 +31,7 @@ def normalize_special_chars(s):
     s = regex.sub(r"''", '"', s)
     s = regex.sub(r'–', '-', s)
     s = regex.sub(r'…', '...', s)
+    # Normalise extra white spaces
     s = regex.sub(r'[\s\xA0]+', ' ', s)
     return s.strip()
 
@@ -44,28 +45,22 @@ def remove_invalid_chars(s):
     return s.strip()
 
 
-def normalize_sentence(sentence, lang='en'):
-    return sentence
-
-
-def get_tagged_words(sentence):
-    pass
-
-
 def parse_docs(raw_docs, stemmer, lang='en'):
     docs = []
     for raw_doc in raw_docs:
         doc = []
 
-        parsed_sentences = parse(raw_doc, lang)
-        for parsed_sentence in parsed_sentences:
+        parsed_sentences = parse(raw_doc['content'], lang)
+        for pos, parsed_sentence in enumerate(parsed_sentences):
             sentence = {
+                'doc_name': raw_doc['doc_name'],
+                'pos': pos,
                 'tokens': parsed_sentence['tokens'],
                 'tags': ['PUNCT' if is_punctuation(token) else parsed_sentence['tags'][i] for i, token in
                          enumerate(parsed_sentence['tokens'])],
                 'lemmas': parsed_sentence['lemmas'] if lang is 'en' else parsed_sentence['tokens'],
-                'stemmer': [stemmer.stem(token) for token in
-                            parsed_sentence['tokens']] if lang is 'en' else parsed_sentence['tokens']
+                'stemmers': [stemmer.stem(token) for token in
+                             parsed_sentence['tokens']] if lang is 'en' else parsed_sentence['tokens']
             }
             doc.append(sentence)
 
