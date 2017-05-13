@@ -3,6 +3,7 @@
 import json
 import os
 
+import gensim
 import requests
 
 DEBUG = True
@@ -144,3 +145,26 @@ def read_dir(dir_path, dir_filter=False, file_filter=False, ext_filter=None):
         debug(e)
 
     return files, paths
+
+
+def build_doc2vec_model(train_file, model_file):
+    # Doc2vec parameters
+    vector_size = 300
+    window_size = 15
+    min_count = 1
+    sampling_threshold = 1e-5
+    worker_count = 20  # Number of parallel processes
+    hs = 0
+    dm = 0  # 0 = dbow; 1 = dmpv
+    negative_size = 5
+    dbow_words = 1
+    dm_concat = 1
+    num_epoch = 100
+
+    docs = gensim.models.doc2vec.TaggedLineDocument(train_file)
+    model = gensim.models.Doc2Vec(docs, size=vector_size, window=window_size, min_count=min_count,
+                                  sample=sampling_threshold, workers=worker_count, hs=hs, dm=dm, negative=negative_size,
+                                  dbow_words=dbow_words, dm_concat=dm_concat, iter=num_epoch)
+
+    # Save model
+    model.save(model_file)
