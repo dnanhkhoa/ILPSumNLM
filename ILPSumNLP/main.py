@@ -1,9 +1,9 @@
 #!/usr/bin/python
 # -*- coding: utf8 -*-
 import kenlm
-import math
 
 import networkx as nx
+from gensim.models import KeyedVectors
 from nltk.stem import SnowballStemmer
 from pulp import LpProblem, LpMaximize, LpVariable, LpBinary, lpSum
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -19,24 +19,70 @@ PREPARE_DATASET = False
 
 LANGUAGE = 'en'
 
+MAX_WORD_LENGTH = 140 if LANGUAGE is 'en' else 300
+
 TOKEN_TYPE = 'stemmers'
 
 # Load language model
-kenlm_model = kenlm.Model(full_path('../Resources/languagemodel/lm_giga_20k_vp_3gram.klm'))
+debug('Loading language model...')
+LANGUAGE_MODEL_FILES = ['lm_giga_20k_vp_3gram.klm', 'en-3gram.klm', 'en-5gram.klm', 'vi-3gram.klm', 'vi-5gram.klm']
+KENLM_MODEL = kenlm.Model(full_path('../Resources/languagemodel/%s' % LANGUAGE_MODEL_FILES[0]))
+debug('Done.')
+
+# Load word2vec model
+debug('Loading word2vec model...')
+WORD2VEC_MODEL_FILES = ['GoogleNews-vectors-negative300.bin', 'W2VModelVN.bin']
+WORD2VEC_MODEL = KeyedVectors.load_word2vec_format('../Resources/word2vec/%s' % WORD2VEC_MODEL_FILES[0], binary=True)
+debug('Done.')
 
 # Load stopwords
+debug('Loading stopwords...')
 STOPWORDS_EN = read_lines(full_path('../Resources/stopwords/en.txt'))
 STOPWORDS_VI = read_lines(full_path('../Resources/stopwords/vi.txt'))
+debug('Done.')
 
 # Load Stemmer
+debug('Loading stemmer...')
 SNOWBALL_STEMMER = SnowballStemmer('english')
+debug('Done.')
 
 
+# Done
+def word2vec_similarity(s1, s2):
+    if s1 == s2:
+        return 1.0
+
+    s1_tokens = s1.split(' ')
+    s2_tokens = s2.split(' ')
+    s1_filtered_tokens = set(s1_tokens)
+    s2_filtered_tokens = set(s2_tokens)
+
+    if len(s1_filtered_tokens & s2_filtered_tokens) == 0:
+        return 0.0
+
+    vocab = WORD2VEC_MODEL.vocab
+
+    for token in s1_filtered_tokens:
+        if token not in vocab:
+            debug('S1: ', token)
+            s1_tokens.remove(token)
+
+    for token in s2_filtered_tokens:
+        if token not in vocab:
+            debug('S2: ', token)
+            s2_tokens.remove(token)
+
+    debug(s1_tokens, s2_tokens)
+
+    return WORD2VEC_MODEL.n_similarity(s1_tokens, s2_tokens)
+
+
+# Done
 def kenlm_score(sentence):
-    num_words = len(remove_punctuation(sentence.split(' ')))
-    return kenlm_model.score(sentence) / (num_words + 1)
+    return KENLM_MODEL.score(sentence) / (len(remove_punctuation(sentence.split(' '))) + 1)
 
 
+# Done
 def eval_linguistic(clusters):
     for cluster in clusters:
         for sentence in cluster:
@@ -44,18 +90,25 @@ def eval_linguistic(clusters):
     return clusters
 
 
-def eval_informativeness(clusters, lang='en'):
+# Done
+def eval_informativeness(clusters, token_type='stemmers', lang='en'):
     for cluster in clusters:
         raw_doc = []
         for sentence in cluster:
+            tokens = []
+            lemmas = []
             stemmers = []
             parsed_sentences = parse(sentence['sentence'], lang)
             for parsed_sentence in parsed_sentences:
+                tokens.extend(parsed_sentence['tokens'])
+                lemmas.extend(parsed_sentence['lemmas'] if lang is 'en' else parsed_sentence['tokens'])
                 stemmers.extend([SNOWBALL_STEMMER.stem(token) for token in
                                  parsed_sentence['tokens']] if lang is 'en' else parsed_sentence['tokens'])
 
+            sentence['tokens'] = normalize_word_suffix(' '.join(remove_punctuation(tokens)), lang=lang)
+            sentence['lemmas'] = normalize_word_suffix(' '.join(remove_punctuation(lemmas)), lang=lang)
             sentence['stemmers'] = normalize_word_suffix(' '.join(remove_punctuation(stemmers)), lang=lang)
-            raw_doc.append(sentence['stemmers'])
+            raw_doc.append(sentence[token_type])
 
         if len(raw_doc) > 0:
             tfidf_vectorizer = TfidfVectorizer(min_df=0, stop_words=STOPWORDS_EN if lang is 'en' else STOPWORDS_VI)
@@ -93,7 +146,7 @@ def clustering_sentences(docs, token_type='stemmers', sim_threshold=0.5, lang='e
         raw_docs.append(raw_doc)
 
     raw_docs.append(' '.join(merged_docs))
-    # debug(raw_docs)  # OK
+    debug(json.dumps(raw_docs))  # OK
 
     # Compute cosine similarities and get index of important document
     tfidf_vectorizer = TfidfVectorizer(min_df=0, stop_words=STOPWORDS_EN if lang is 'en' else STOPWORDS_VI)
@@ -101,7 +154,7 @@ def clustering_sentences(docs, token_type='stemmers', sim_threshold=0.5, lang='e
     cosine_similarities = cosine_similarity(tfidf_matrix, tfidf_matrix)
     # debug(cosine_similarities)  # OK
     imp_doc_idx = cosine_similarities[num_docs:, :num_docs].argmax()
-    debug('- Document id: %d\n' % imp_doc_idx, cosine_similarities[num_docs:, :num_docs])
+    debug('- Important document: %d\n' % imp_doc_idx, cosine_similarities[num_docs:, :num_docs])
 
     # Generate clusters
     clusters = []
@@ -150,38 +203,92 @@ def clustering_sentences(docs, token_type='stemmers', sim_threshold=0.5, lang='e
 
     final_clusters = []
     for cluster in clusters:
-        if len(cluster) >= math.ceil(num_docs / 2.):
+        if len(cluster) >= (num_docs // 2):
             final_clusters.append(cluster)
 
     # debug(json.dumps(final_clusters))  # OK
+    debug('- Number of clusters after filtering: %d' % len(final_clusters))  # OK
+    for i, cluster in enumerate(final_clusters):
+        debug('-- Cluster %d: %d sentences' % (i, len(cluster)))
 
     return final_clusters
 
 
+# Done
 def ordering_clusters(clusters):
-    for cluster in clusters:
-        debug(cluster)
-    return clusters
+    edges = []
+    for i, cluster_i in enumerate(clusters):
+        for j, cluster_j in enumerate(clusters):
+            if i == j:
+                continue
+
+            cij = 0
+            cji = 0
+            for sentence_i in cluster_i:
+                for sentence_j in cluster_j:
+                    if sentence_i['doc_name'] == sentence_j['doc_name']:  # In the same document
+                        if sentence_i['pos'] < sentence_j['pos']:  # Cluster i precedes cluster j
+                            cij += 1
+                        elif sentence_i['pos'] > sentence_j['pos']:  # Cluster j precedes cluster i
+                            cji += 1
+
+            edges.append((i, j, cij))
+            edges.append((j, i, cji))
+
+    if len(edges) == 0:
+        return clusters
+
+    # Find optimal path
+    digraph = nx.DiGraph()
+    digraph.add_weighted_edges_from(edges)
+
+    def compute_node_weights(graph):
+        values = {}
+        for v in graph:
+            values[v] = graph.out_degree(v, 'weight') - graph.in_degree(v, 'weight')
+        return values
+
+    cluster_order = []
+    while digraph.number_of_nodes() > 0:
+        nodes = compute_node_weights(graph=digraph)
+        # Using the original order if there is more max values
+        node = max(nodes, key=nodes.get)
+        cluster_order.append((node, nodes[node]))
+        digraph.remove_node(node)
+
+    debug('- Order:', cluster_order)
+
+    final_clusters = []
+    for i, _ in cluster_order:
+        final_clusters.append(clusters[i])
+
+    # debug('- Before:', json.dumps(clusters))
+    # debug('- After:', json.dumps(final_clusters))
+
+    return final_clusters
 
 
-def compress_clusters(clusters, lang='en'):
+# Done
+def compress_clusters(clusters, num_words=8, num_candidates=200, lang='en'):
     compressed_clusters = []
 
     for cluster in clusters:
-        compressed_cluster = []
         raw_sentences = []
         for sentence in cluster:
             raw_sentences.append(
                 ' '.join(['%s/%s' % (token, sentence['tags'][i]) for i, token in enumerate(sentence['tokens'])]))
 
-        compresser = WordGraph(raw_sentences, lang=lang)
+        # debug(json.dumps(raw_sentences))  # OK
+        compresser = WordGraph(raw_sentences, nb_words=num_words, lang=lang)
 
         # Get the 200 best paths
-        candidates = compresser.get_compression(nb_candidates=100)
+        candidates = compresser.get_compression(nb_candidates=num_candidates)
 
-        # Bonus
+        # Use Keyphrase reranking method
         # reranker = KeyphraseReranker(raw_sentences, candidates, lang=lang)
         # candidates = reranker.rerank_nbest_compressions()
+
+        compressed_cluster = []
 
         for cummulative_score, candidate in candidates:
             # Normalize path score by path length
@@ -199,13 +306,16 @@ def compress_clusters(clusters, lang='en'):
     return compressed_clusters
 
 
-def solve_ilp(clusters, num_words=100, lang='en'):
-    ilp_problem = LpProblem("mip1", LpMaximize)
+def solve_ilp(clusters, token_type='stemmers', num_words=100, lang='en'):
+    ilp_problem = LpProblem("amds", LpMaximize)
+
+    raw_sentences = []
 
     ilp_vars_matrix = []
-    raw_sentences = []
-    obj_constraints = []
-    max_length_constraints = []
+
+    obj_constraint = []
+    max_length_constraint = []
+
     for i, cluster in enumerate(clusters):
         ilp_vars = []
         raw_sentence = []
@@ -217,9 +327,9 @@ def solve_ilp(clusters, num_words=100, lang='en'):
 
             raw_sentence.append(sentence['sentence'])
 
-            max_length_constraints.append(sentence['num_words'] * var)
+            max_length_constraint.append(sentence['num_words'] * var)
 
-            obj_constraints.append(
+            obj_constraint.append(
                 (1. / sentence['num_words']) * sentence['informativeness_score'] * sentence['linguistic_score'] * var)
 
             max_sentence_constraints.append(var)
@@ -228,8 +338,8 @@ def solve_ilp(clusters, num_words=100, lang='en'):
         ilp_vars_matrix.append(ilp_vars)
         ilp_problem += lpSum(max_sentence_constraints) <= 1.0
 
-    ilp_problem += lpSum(max_length_constraints) <= num_words
-    ilp_problem += lpSum(obj_constraints)
+    ilp_problem += lpSum(max_length_constraint) <= num_words
+    ilp_problem += lpSum(obj_constraint)
 
     for i, cluster in enumerate(clusters):
         for j, sentence in enumerate(cluster):
@@ -257,8 +367,15 @@ def solve_ilp(clusters, num_words=100, lang='en'):
 
 
 def main():
+    s1 = 'An Apple'
+    s2 = 'A apple'
+    debug(word2vec_similarity(s1, s2))
+
+    return
     samples = read_json(full_path('../Temp/datasets/%s/info.json' % LANGUAGE))
     for sample in samples:
+        sample = samples[0]
+
         debug('Cluster: %s (%s)' % (sample['cluster_name'], sample['original_cluster_name']))
 
         # Prepare docs in cluster
@@ -272,16 +389,35 @@ def main():
         clusters = clustering_sentences(docs=parsed_docs, token_type=TOKEN_TYPE, sim_threshold=0.25, lang=LANGUAGE)
         debug('Done.')
 
-        debug('Ordering clusters...')
-        clusters = ordering_clusters(clusters)
-        debug('Done.')
-
-        debug('Compressing sentences in each cluster...')
-        # compressed_clusters = compress_clusters(clusters, LANGUAGE)
-        debug('Done.')
+        # debug('Ordering clusters...')
+        # clusters = ordering_clusters(clusters=clusters)
+        # debug('Done.')
+        #
+        # debug('Compressing sentences in each cluster...')
+        # compressed_clusters = compress_clusters(clusters=clusters, num_words=8, num_candidates=200, lang=LANGUAGE)
+        # debug('Done.')
+        #
+        # debug('Computing linguistic score...')
         # scored_clusters = eval_linguistic(clusters=compressed_clusters)
-        # scored_clusters = eval_informativeness(clusters=scored_clusters, lang=LANGUAGE)
-        # final_sentences = solve_ilp(scored_clusters, lang=LANGUAGE)
+        # debug('Done.')
+        #
+        # debug('Computing informativeness score...')
+        # scored_clusters = eval_informativeness(clusters=scored_clusters, token_type=TOKEN_TYPE, lang=LANGUAGE)
+        # debug('Done.')
+        #
+        # debug('Solving ILP...')
+        # final_sentences = []
+        # from absummarizer import Example
+        # for cluster in clusters:
+        #     raw_doc = []
+        #     for sentence in cluster:
+        #         raw_doc.append(' '.join(sentence['tokens']))
+        #
+        #     final_sentence = Example.segmentize(' '.join(raw_doc))
+        #     final_sentences.append(Example.generateSummaries(final_sentence, mode="Abstractive"))
+        #
+        # # final_sentences = solve_ilp(clusters=scored_clusters, token_type=TOKEN_TYPE, num_words=140, lang=LANGUAGE)
+        # debug('Done.')
         #
         # # debug(' '.join(final_sentences))
         # write_file(' '.join(final_sentences), sample['save'])

@@ -1006,9 +1006,9 @@ class WordGraph:
 
 
 # ~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
-# [ Class keyphrase_reranker
+# [ Class KeyphraseReranker
 # ~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
-class keyphrase_reranker:
+class KeyphraseReranker:
     """
     The *keyphrase_reranker* reranks a list of compression candidates according 
     to the keyphrases they contain. Keyphrases are extracted from the set of 
@@ -1036,8 +1036,7 @@ class keyphrase_reranker:
     """
 
     # -T-----------------------------------------------------------------------T-
-    def __init__(self, sentence_list, nbest_compressions, lang="en",
-                 patterns=[], stopwords=[], pos_separator='/'):
+    def __init__(self, sentence_list, nbest_compressions, lang="en", patterns=[], stopwords=[], pos_separator='/'):
 
         self.sentences = list(sentence_list)
         """ The list of related sentences provided by the user. """
@@ -1130,8 +1129,7 @@ class keyphrase_reranker:
                 if sentence[j][0] in self.stopwords:
                     sentence[j] = (sentence[j][0], "STOPWORD")
 
-                    # Add the word only if it belongs to one of the syntactic
-                # categories
+                # Add the word only if it belongs to one of the syntactic categories
                 if sentence[j][1] in self.syntactic_filter:
 
                     # Add node to the graph if not exists
@@ -1286,8 +1284,7 @@ class keyphrase_reranker:
                 self.word_scores[node_i] = (1 - d) + (d * sum_Vj)
 
                 # Compute the difference between old and new score
-                score_difference = math.fabs(self.word_scores[node_i] \
-                                             - current_node_scores[node_i])
+                score_difference = math.fabs(self.word_scores[node_i] - current_node_scores[node_i])
 
                 max_node_difference = max(score_difference, score_difference)
 
@@ -1454,7 +1451,7 @@ class keyphrase_reranker:
         token, POS = m.group(1), m.group(2)
 
         # Return the tuple 
-        return (token.lower(), POS)
+        return token.lower(), POS
 
     # -B-----------------------------------------------------------------------B-
 
@@ -1471,5 +1468,5 @@ class keyphrase_reranker:
         # -B-----------------------------------------------------------------------B-
 
 # ~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
-# ] Ending keyphrase_reranker class
+# ] Ending KeyphraseReranker class
 # ~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
