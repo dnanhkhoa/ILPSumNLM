@@ -108,6 +108,7 @@
 import bisect
 
 import networkx as nx
+import numpy as np
 
 from utils import *
 
@@ -289,7 +290,7 @@ class WordGraph:
                         ids.append(sid)
 
                     # Update the node in the graph if not same sentence
-                    if not i in ids:
+                    if i not in ids:
                         self.graph.node[(node, 0)]['info'].append((i, j))
                         mapping[j] = (node, 0)
 
@@ -399,7 +400,7 @@ class WordGraph:
                 token, POS = self.sentence[i][j]
 
                 # If *NOT* stopword, continues
-                if not token in self.stopwords:
+                if token not in self.stopwords:
                     continue
 
                 # Create the node identifier
@@ -433,10 +434,8 @@ class WordGraph:
                     for l in range(k):
                         # Get the immediate context words of the nodes, the
                         # boolean indicates to consider only non stopwords
-                        l_context = self.get_directed_context(node, l, 'left', \
-                                                              True)
-                        r_context = self.get_directed_context(node, l, 'right', \
-                                                              True)
+                        l_context = self.get_directed_context(node, l, 'left', True)
+                        r_context = self.get_directed_context(node, l, 'right', True)
 
                         # Compute the (directed) context sum
                         val = l_context.count(prev_node)
@@ -575,7 +574,7 @@ class WordGraph:
             k += 1
         return k
 
-    def get_directed_context(self, node, k, dir='all', non_pos=False):
+    def get_directed_context(self, node, k, _dir='all', non_pos=False):
         """
         Returns the directed context of a given node, i.e. a list of word/POS of
         the left or right neighboring nodes in the graph. The function takes 
@@ -597,26 +596,24 @@ class WordGraph:
         # For all the sentence/position tuples
         for sid, off in self.graph.node[(node, k)]['info']:
 
-            prev = self.sentence[sid][off - 1][0].lower() + self.sep + \
-                   self.sentence[sid][off - 1][1]
+            _prev = self.sentence[sid][off - 1][0].lower() + self.sep + self.sentence[sid][off - 1][1]
 
-            next = self.sentence[sid][off + 1][0].lower() + self.sep + \
-                   self.sentence[sid][off + 1][1]
+            _next = self.sentence[sid][off + 1][0].lower() + self.sep + self.sentence[sid][off + 1][1]
 
             if non_pos:
                 if self.sentence[sid][off - 1][0] not in self.stopwords:
-                    l_context.append(prev)
+                    l_context.append(_prev)
                 if self.sentence[sid][off + 1][0] not in self.stopwords:
-                    r_context.append(next)
+                    r_context.append(_next)
             else:
-                l_context.append(prev)
-                r_context.append(next)
+                l_context.append(_prev)
+                r_context.append(_next)
 
         # Returns the left (previous) context
-        if dir == 'left':
+        if _dir == 'left':
             return l_context
         # Returns the right (next) context
-        elif dir == 'right':
+        elif _dir == 'right':
             return r_context
         # Returns the whole context
         else:
@@ -808,14 +805,14 @@ class WordGraph:
                         visited[node] += 1
                     else:
                         visited[node] = 0
-                    id = visited[node]
+                    _id = visited[node]
 
                     # Add the node to orderedX
-                    bisect.insort(orderedX, (w, node, id))
+                    bisect.insort(orderedX, (w, node, _id))
 
                     # Add the node to paths
-                    paths[(w, node, id)] = [node]
-                    paths[(w, node, id)].extend(shortestpath)
+                    paths[(w, node, _id)] = [node]
+                    paths[(w, node, _id)].extend(shortestpath)
 
         # Returns the list of shortest paths
         return kshortestpaths
@@ -853,21 +850,14 @@ class WordGraph:
 
         return fusions
 
-    def max_index(self, l):
+    @staticmethod
+    def max_index(l):
         """ Returns the index of the maximum value of a given list. """
-
-        ll = len(l)
-        if ll < 0:
-            return None
-        elif ll == 1:
-            return 0
-        max_val = l[0]
-        max_ind = 0
-        for z in range(1, ll):
-            if l[z] > max_val:
-                max_val = l[z]
-                max_ind = z
-        return max_ind
+        try:
+            return np.argmax(l)
+        except ValueError:
+            pass
+        return None
 
     def compute_statistics(self):
         """
@@ -902,4 +892,4 @@ class WordGraph:
 
     def write_dot(self, dot_file):
         """ Outputs the word graph in dot format in the specified file. """
-        nx.write_dot(self.graph, dot_file)
+        nx.drawing.nx_agraph.write_dot(self.graph, dot_file)
