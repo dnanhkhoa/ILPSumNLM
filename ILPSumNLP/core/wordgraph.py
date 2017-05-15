@@ -751,7 +751,7 @@ class WordGraph:
                     # -T-------------------------------------------------------T-
                     # --- Constraints on the shortest paths
 
-                    # 1. Check if path contains at least one werb
+                    # 1. Check if path contains at least one verb
                     # 2. Check the length of the shortest path, without 
                     #    considering punctuation marks and starting node (-1 in
                     #    the range loop, because nodes are reversed)
