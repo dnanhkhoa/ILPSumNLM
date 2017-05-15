@@ -28,7 +28,7 @@ def make_rouge_script(config, peer_root, model_root, save_path):
 
         lines.append('\t\t<INPUT-FORMAT TYPE="SPL"></INPUT-FORMAT>')
         lines.append('\t\t<MODEL-ROOT>%s/%s</MODEL-ROOT>' % (model_root, info['cluster_name']))
-        lines.append('\t\t<PEER-ROOT>%s/%s</PEER-ROOT>' % (peer_root, info['cluster_name']))
+        lines.append('\t\t<PEER-ROOT>%s</PEER-ROOT>' % peer_root)
 
         # Models
         lines.append('\t\t<MODELS>')
@@ -69,8 +69,8 @@ def make_bleu_script(config, peer_root, model_root, save_path):
     for info in config:
         for peer in info['peers']:
             for model in info['models']:
-                lines.append('$cmd "%s/%s/%s" "%s/%s/%s"' % (
-                    peer_root, info['cluster_name'], peer, model_root, info['cluster_name'], model['model_name']))
+                lines.append('$cmd "%s/%s" "%s/%s/%s"' % (
+                    peer_root, peer, model_root, info['cluster_name'], model['model_name']))
                 lines.append('echo')
 
     # Write sh file
@@ -111,8 +111,8 @@ def preprocess_duc04(dir_path, save_path):
             'original_cluster_name': cluster,
             'docs': [],
             'models': [],
-            'peers': ['1'],
-            'save': '%s/%s/1' % (peers_dir_path, cluster_name)
+            'peers': [str(i + 1)],
+            'save': '%s/%s' % (peers_dir_path, i + 1)
         }
 
         # Docs
@@ -188,8 +188,8 @@ def preprocess_vimds(dir_path, save_path):
             'original_cluster_name': cluster,
             'docs': [],
             'models': [],
-            'peers': ['1'],
-            'save': '%s/%s/1' % (peers_dir_path, cluster_name)
+            'peers': [str(i + 1)],
+            'save': '%s/%s' % (peers_dir_path, i + 1)
         }
 
         # Docs
