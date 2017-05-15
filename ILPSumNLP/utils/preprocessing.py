@@ -38,8 +38,8 @@ def make_rouge_script(config, peer_root, model_root, save_path):
 
         # Peers
         lines.append('\t\t<PEERS>')
-        for peer in info['peers']:
-            lines.append('\t\t\t<P ID="%s">%s</P>' % (peer, peer))
+        for peer, file in info['peers']:
+            lines.append('\t\t\t<P ID="%s">%s</P>' % (peer, file))
         lines.append('\t\t</PEERS>')
 
         lines.append('\t</EVAL>')
@@ -67,10 +67,10 @@ def make_bleu_script(config, peer_root, model_root, save_path):
     lines = ['cmd="ruby %s/doc_bleu.rb --ngram 4"' % BLEU_PATH]
 
     for info in config:
-        for peer in info['peers']:
+        for _, file in info['peers']:
             for model in info['models']:
                 lines.append('$cmd "%s/%s" "%s/%s/%s"' % (
-                    peer_root, peer, model_root, info['cluster_name'], model['model_name']))
+                    peer_root, file, model_root, info['cluster_name'], model['model_name']))
                 lines.append('echo')
 
     # Write sh file
@@ -111,7 +111,7 @@ def preprocess_duc04(dir_path, save_path):
             'original_cluster_name': cluster,
             'docs': [],
             'models': [],
-            'peers': [str(i + 1)],
+            'peers': [('1', str(i + 1))],
             'save': '%s/%s' % (peers_dir_path, i + 1)
         }
 
@@ -188,7 +188,7 @@ def preprocess_vimds(dir_path, save_path):
             'original_cluster_name': cluster,
             'docs': [],
             'models': [],
-            'peers': [str(i + 1)],
+            'peers': [('1', str(i + 1))],
             'save': '%s/%s' % (peers_dir_path, i + 1)
         }
 

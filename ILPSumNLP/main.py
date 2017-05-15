@@ -27,7 +27,7 @@ SIMILARITY_METHOD = ['freq', 'w2v', 'wmd', 'd2v'][0]
 
 USE_TFIDF = False
 
-TOKEN_TYPE = ['tokens', 'lemmas', 'stemmers'][0 if SIMILARITY_METHOD != 'freq' else 2]
+TOKEN_TYPE = ['tokens', 'lemmas', 'stemmers'][0 if SIMILARITY_METHOD != 'freq' else 1]
 
 LANGUAGE_MODEL_METHODS = ['ngram', 'rmn'][0]
 
@@ -506,7 +506,7 @@ def solve_ilp(clusters, num_words=150, sim_threshold=0.5, greedy_mode=False):
                     if row.max() >= sim_threshold:
                         ilp_problem += ilp_vars[k] == 0.0
 
-            ilp_problem += lpSum(max_sentence_constraint) == 1.0
+            ilp_problem += lpSum(max_sentence_constraint) <= 1.0
             ilp_problem += lpSum(obj_constraint)
 
             ilp_problem.solve()
@@ -545,7 +545,7 @@ def solve_ilp(clusters, num_words=150, sim_threshold=0.5, greedy_mode=False):
 
             ilp_vars_table.append(ilp_vars)
 
-            ilp_problem += lpSum(max_sentence_constraint) == 1.0
+            ilp_problem += lpSum(max_sentence_constraint) <= 1.0
 
         ilp_problem += lpSum(max_length_constraint) <= num_words
         ilp_problem += lpSum(obj_constraint)
@@ -590,7 +590,7 @@ def main():
 
         # Clustering sentences into clusters
         debug('Clustering sentences in documents...')
-        clusters = clustering_sentences(docs=parsed_docs, cluster_threshold=num_docs // 2, sim_threshold=0.2, n_top=20)
+        clusters = clustering_sentences(docs=parsed_docs, cluster_threshold=3, sim_threshold=0.25, n_top=None)
         debug('Done.')
 
         debug('Ordering clusters...')
@@ -598,7 +598,7 @@ def main():
         debug('Done.')
 
         debug('Compressing sentences in each cluster...')
-        compressed_clusters = compress_clusters(clusters=clusters, num_words=8, max_words=30, num_candidates=200,
+        compressed_clusters = compress_clusters(clusters=clusters, num_words=8, max_words=40, num_candidates=200,
                                                 sim_threshold=0.8, simple_method=False)
         debug('Done.')
 
@@ -613,7 +613,7 @@ def main():
         debug('Done.')
 
         debug('Solving ILP...')
-        final_sentences = solve_ilp(clusters=scored_clusters, num_words=150 if LANGUAGE is 'en' else 300,
+        final_sentences = solve_ilp(clusters=scored_clusters, num_words=130 if LANGUAGE is 'en' else 300,
                                     sim_threshold=0.5, greedy_mode=True)
         debug('Done.')
 
