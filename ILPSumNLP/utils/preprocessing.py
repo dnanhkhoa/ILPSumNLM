@@ -125,7 +125,7 @@ def preprocess_duc04(dir_path, save_path):
                 file_content = matcher.group(1)
 
                 # Preprocessing
-                file_content = normalize_dataset(file_content)
+                file_content = ' '.join(normalize_dataset(file_content))
                 info['docs'].append({
                     'doc_name': str(j + 1),
                     'original_name': doc,
@@ -140,16 +140,18 @@ def preprocess_duc04(dir_path, save_path):
         ref_id = 0
         for j, ref_doc in enumerate(ref_docs):
             if cluster.lower()[:-1] in ref_doc.lower():
-                info['models'].append({
-                    'model_name': str(ref_id + 1),
-                    'original_name': ref_doc
-                })
-
                 file_name = '%s/%s/%d' % (models_dir_path, cluster_name, ref_id + 1)
                 file_content = read_file(refs_path[j])
 
                 # Preprocessing
-                write_file(normalize_dataset(file_content), file_name)
+                tokens = normalize_dataset(file_content)
+                write_file(' '.join(tokens), file_name)
+
+                info['models'].append({
+                    'model_name': str(ref_id + 1),
+                    'original_name': ref_doc,
+                    'num_words': len(remove_punctuation(tokens))
+                })
 
                 ref_id += 1
                 refs_count += 1
@@ -205,7 +207,7 @@ def preprocess_vimds(dir_path, save_path):
                 file_content = read_file(docs_path[j])
 
                 # Preprocessing
-                file_content = normalize_dataset(file_content, lang='vi')
+                file_content = ' '.join(normalize_dataset(file_content, lang='vi'))
                 info['docs'].append({
                     'doc_name': str(doc_id + 1),
                     'original_name': doc,
@@ -218,16 +220,18 @@ def preprocess_vimds(dir_path, save_path):
                 docs_count += 1
 
             elif '.ref' in doc_name and '.tok' not in doc_name:  # Ref
-                info['models'].append({
-                    'model_name': str(ref_id + 1),
-                    'original_name': doc_name
-                })
-
                 file_name = '%s/cluster_%d/%d' % (models_dir_path, i + 1, ref_id + 1)
                 file_content = read_file(docs_path[j])
 
                 # Preprocessing
-                write_file(normalize_dataset(file_content, lang='vi'), file_name)
+                tokens = normalize_dataset(file_content, lang='vi')
+                write_file(' '.join(tokens), file_name)
+
+                info['models'].append({
+                    'model_name': str(ref_id + 1),
+                    'original_name': doc_name,
+                    'num_words': len(remove_punctuation(tokens))
+                })
 
                 ref_id += 1
                 refs_count += 1

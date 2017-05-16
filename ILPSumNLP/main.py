@@ -1,6 +1,7 @@
 #!/usr/bin/python
 # -*- coding: utf8 -*-
 import kenlm
+import timeit
 from datetime import datetime
 from random import shuffle
 
@@ -27,13 +28,13 @@ SIMILARITY_METHOD = ['freq', 'w2v', 'wmd', 'd2v'][0]
 
 USE_TFIDF = False
 
-TOKEN_TYPE = ['tokens', 'lemmas', 'stemmers'][0 if SIMILARITY_METHOD != 'freq' else 1]
+TOKEN_TYPE = ['tokens', 'lemmas', 'stemmers'][0 if SIMILARITY_METHOD != 'freq' else 2]
 
 LANGUAGE_MODEL_METHODS = ['ngram', 'rmn'][0]
 
 # Load language model | OK
 KENLM_MODEL = kenlm.Model(
-    full_path('../Resources/languagemodel/giga-%s-3gram.klm' % LANGUAGE)) if LANGUAGE_MODEL_METHODS is 'ngram' else None
+    full_path('../Resources/languagemodel/%s-3gram.klm' % LANGUAGE)) if LANGUAGE_MODEL_METHODS is 'ngram' else None
 
 # Define vectorizer | OK
 VECTORIZER = TfidfVectorizer if USE_TFIDF else CountVectorizer
@@ -88,6 +89,10 @@ def word2vec_similarity(d1, d2):
 
     s2_tokens = list(filter(lambda x: x not in s2_invalid_tokens, s2_tokens))
 
+    # No words
+    if len(s1_tokens) == 0 or len(s2_tokens) == 0:
+        return 0.0
+
     return WORD2VEC_MODEL.n_similarity(s1_tokens, s2_tokens)
 
 
@@ -134,20 +139,20 @@ def get_d2v_vector(doc):
 
 
 # Done
-def doc_similarity(docs):
+def doc_similarity(docs, method=SIMILARITY_METHOD):
     size = len(docs)
     cosine_similarities = None
-    if SIMILARITY_METHOD == 'w2v':
+    if method == 'w2v':
         cosine_similarities = np.ones((size, size))
         for i in range(0, size - 1):
             for j in range(i + 1, size):
                 cosine_similarities[i][j] = cosine_similarities[j][i] = word2vec_similarity(docs[i], docs[j])
-    elif SIMILARITY_METHOD == 'wmd':
+    elif method == 'wmd':
         cosine_similarities = np.ones((size, size))
         for i in range(0, size - 1):
             for j in range(i + 1, size):
                 cosine_similarities[i][j] = cosine_similarities[j][i] = wmd_similarity(docs[i], docs[j])
-    elif SIMILARITY_METHOD == 'd2v':
+    elif method == 'd2v':
         pass
     else:
         vectorizer = VECTORIZER(min_df=0, stop_words=STOPWORDS)
@@ -159,7 +164,8 @@ def doc_similarity(docs):
 
 # Done
 def kenlm_score(sentence):
-    return KENLM_MODEL.score(sentence) / (1. + len(sentence.split(' ')))
+    tokens = remove_punctuation(sentence.split(' '))
+    return KENLM_MODEL.score(' '.join(tokens)) / (1. + len(tokens))
 
 
 # Done
@@ -466,9 +472,16 @@ def solve_ilp(clusters, num_words=150, sim_threshold=0.5, greedy_mode=False):
     final_sentences = []
 
     if greedy_mode:
+
         # Greedy mode
         selected_sentences = []
         summary_length = 0
+
+        # Sort clusters by number of sentences in descending order
+        cluster_indices = sorted([(i, len(cluster)) for i, cluster in enumerate(clusters)], key=lambda v: v[1],
+                                 reverse=True)
+
+        debug(cluster_indices)
 
         for cluster in clusters:
             ilp_problem = LpProblem("amds", LpMaximize)
@@ -575,12 +588,19 @@ def solve_ilp(clusters, num_words=150, sim_threshold=0.5, greedy_mode=False):
 
 
 def main():
+    start_time = timeit.default_timer()
+
     backup = []
     samples = read_json(full_path('../Temp/datasets/%s/info.json' % LANGUAGE))
     for sample in samples:
         num_docs = len(sample['docs'])
 
         debug('Cluster: %s (%s)' % (sample['cluster_name'], sample['original_cluster_name']))
+
+        num_words = 120
+        # for model in sample['models']:
+        #     num_words = max(num_words, model['num_words'])
+        # num_words = round(num_words / 10.) * 10
 
         # Prepare docs in cluster
         raw_docs = sample['docs']
@@ -590,7 +610,7 @@ def main():
 
         # Clustering sentences into clusters
         debug('Clustering sentences in documents...')
-        clusters = clustering_sentences(docs=parsed_docs, cluster_threshold=3, sim_threshold=0.25, n_top=None)
+        clusters = clustering_sentences(docs=parsed_docs, cluster_threshold=3, sim_threshold=0.15, n_top=30)
         debug('Done.')
 
         debug('Ordering clusters...')
@@ -599,7 +619,7 @@ def main():
 
         debug('Compressing sentences in each cluster...')
         compressed_clusters = compress_clusters(clusters=clusters, num_words=8, max_words=40, num_candidates=200,
-                                                sim_threshold=0.8, simple_method=False)
+                                                sim_threshold=0.8, simple_method=True)
         debug('Done.')
 
         backup.append(compressed_clusters)
@@ -613,12 +633,13 @@ def main():
         debug('Done.')
 
         debug('Solving ILP...')
-        final_sentences = solve_ilp(clusters=scored_clusters, num_words=130 if LANGUAGE is 'en' else 300,
-                                    sim_threshold=0.5, greedy_mode=True)
+        final_sentences = solve_ilp(clusters=scored_clusters, num_words=num_words, sim_threshold=0.5, greedy_mode=True)
         debug('Done.')
 
         debug(' '.join(final_sentences))
         write_file(' '.join(final_sentences), sample['save'])
+
+    debug('Total time: %d s' % (timeit.default_timer() - start_time))
 
     # Backup
     write_json(backup, '../Temp/datasets/%s/backup-%s.json' % (LANGUAGE, datetime.now().strftime('%Y-%m-%d-%H-%M-%S')))

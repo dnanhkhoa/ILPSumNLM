@@ -79,4 +79,4 @@ def normalize_dataset(doc, lang='en'):
                 continue
             tokens.append(regex.sub('_+', ' ', token.lower()).strip())
 
-    return ' '.join(tokens)
+    return tokens
