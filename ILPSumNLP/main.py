@@ -26,6 +26,8 @@ LANGUAGE = 'en'
 # Define methods
 SIMILARITY_METHOD = ['freq', 'w2v', 'wmd', 'd2v'][0]
 
+USE_STOPWORDS = True
+
 USE_TFIDF = False
 
 TOKEN_TYPE = ['tokens', 'lemmas', 'stemmers'][0 if SIMILARITY_METHOD != 'freq' else 2]
@@ -49,7 +51,7 @@ DOC2VEC_MODEL = gensim.models.Doc2Vec.load(
     '../Resources/doc2vec/%s/model.bin' % LANGUAGE) if SIMILARITY_METHOD == 'd2v' else None
 
 # Load stopwords | OK
-STOPWORDS = read_lines(full_path('../Resources/stopwords/%s.txt' % LANGUAGE))
+STOPWORDS = read_lines(full_path('../Resources/stopwords/%s.txt' % LANGUAGE)) if USE_STOPWORDS else []
 
 # Load Stemmer | OK
 SNOWBALL_STEMMER = SnowballStemmer('english')
@@ -597,7 +599,7 @@ def main():
 
         debug('Cluster: %s (%s)' % (sample['cluster_name'], sample['original_cluster_name']))
 
-        num_words = 120
+        num_words = 100
         # for model in sample['models']:
         #     num_words = max(num_words, model['num_words'])
         # num_words = round(num_words / 10.) * 10

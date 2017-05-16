@@ -12,17 +12,11 @@ def is_punctuation(token):
 
 
 def normalize_word_suffix(s, lang='en'):
-    if lang is 'en':
-        return regex.sub(r"\s+('m|'ll|'d|'s|n't)", '\g<1>', s, flags=regex.IGNORECASE)
-    return s
+    return regex.sub(r"\s+('m|'ll|'d|'s|n't)", '\g<1>', s, flags=regex.IGNORECASE) if lang is 'en' else s
 
 
 def remove_punctuation(tokens):
-    normalized_tokens = []
-    for token in tokens:
-        if not is_punctuation(token):
-            normalized_tokens.append(token)
-    return normalized_tokens
+    return [token for token in tokens if not is_punctuation(token)]
 
 
 def normalize_special_chars(s):
