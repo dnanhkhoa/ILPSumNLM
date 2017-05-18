@@ -67,10 +67,10 @@ def make_bleu_script(config, peer_root, model_root, save_path):
     lines = ['cmd="ruby %s/doc_bleu.rb --ngram 4"' % BLEU_PATH]
 
     for info in config:
-        for _, file in info['peers']:
+        for _, peer_file in info['peers']:
             for model in info['models']:
                 lines.append('$cmd "%s/%s" "%s/%s/%s"' % (
-                    peer_root, file, model_root, info['cluster_name'], model['model_name']))
+                    peer_root, peer_file, model_root, info['cluster_name'], model['model_name']))
                 lines.append('echo')
 
     # Write sh file
@@ -111,7 +111,7 @@ def preprocess_duc04(dir_path, save_path):
             'original_cluster_name': cluster,
             'docs': [],
             'models': [],
-            'peers': [('1', str(i + 1))],
+            'peers': [('ILPSum', str(i + 1))],
             'save': '%s/%s' % (peers_dir_path, i + 1)
         }
 
@@ -125,14 +125,13 @@ def preprocess_duc04(dir_path, save_path):
                 file_content = matcher.group(1)
 
                 # Preprocessing
-                file_content = ' '.join(normalize_dataset(file_content))
                 info['docs'].append({
                     'doc_name': str(j + 1),
                     'original_name': doc,
-                    'content': file_content
+                    'content': remove_invalid_chars(file_content)
                 })
 
-                write_file(file_content, file_name)
+                write_file(normalize_word_suffix(' '.join(normalize_dataset(file_content))), file_name)
 
                 docs_count += 1
 
@@ -145,7 +144,7 @@ def preprocess_duc04(dir_path, save_path):
 
                 # Preprocessing
                 tokens = normalize_dataset(file_content)
-                write_file(' '.join(tokens), file_name)
+                write_file(normalize_word_suffix(' '.join(tokens)), file_name)
 
                 info['models'].append({
                     'model_name': str(ref_id + 1),
@@ -190,7 +189,7 @@ def preprocess_vimds(dir_path, save_path):
             'original_cluster_name': cluster,
             'docs': [],
             'models': [],
-            'peers': [('1', str(i + 1))],
+            'peers': [('ILPSum', str(i + 1))],
             'save': '%s/%s' % (peers_dir_path, i + 1)
         }
 
@@ -207,14 +206,13 @@ def preprocess_vimds(dir_path, save_path):
                 file_content = read_file(docs_path[j])
 
                 # Preprocessing
-                file_content = ' '.join(normalize_dataset(file_content, lang='vi'))
                 info['docs'].append({
                     'doc_name': str(doc_id + 1),
                     'original_name': doc,
-                    'content': file_content
+                    'content': remove_invalid_chars(file_content)
                 })
 
-                write_file(file_content, file_name)
+                write_file(' '.join(normalize_dataset(file_content, lang='vi')), file_name)
 
                 doc_id += 1
                 docs_count += 1

@@ -103,7 +103,7 @@ def write_json(obj, file_name):
 def parse(docs, lang='en'):
     try:
         server_url = '0.0.0.0'
-        server_port = 5100 if lang is 'en' else 5105
+        server_port = 5100 if lang == 'en' else 5105
         data = {
             'text': [doc.encode('UTF-8') for doc in docs] if isinstance(docs, list) else docs.encode('UTF-8')
         }
@@ -168,3 +168,9 @@ def build_doc2vec_model(train_file, model_file):
 
     # Save model
     model.save(model_file)
+
+
+def get_d2v_vector(doc, doc2vec_model):
+    start_alpha = 0.01
+    infer_epoch = 1000
+    return doc2vec_model.infer_vector(doc, alpha=start_alpha, steps=infer_epoch)
