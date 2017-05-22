@@ -3,6 +3,7 @@
 import json
 import os
 
+import chardet
 import gensim
 import requests
 
@@ -31,19 +32,24 @@ def path_info(path):
 
 
 def make_dirs(dir_name):
-    dir_name = full_path(dir_name)
     if path_info(dir_name) != 0:
-        os.makedirs(dir_name)
+        os.makedirs(full_path(dir_name))
+
+
+def file_encoding(file_name):
+    assert path_info(file_name) == 1, 'File does not exist!'
+    with open(full_path(file_name), 'rb') as f:
+        return chardet.detect(f.read())['encoding']
 
 
 def read_lines(file_name):
-    file_name = full_path(file_name)
     assert path_info(file_name) == 1, 'File does not exist!'
     lines = []
-    with open(file_name, 'rb') as f:
+    encoding = file_encoding(file_name)
+    with open(full_path(file_name), 'r', encoding=encoding) as f:
         try:
             for line in f:
-                lines.append(line.decode('UTF-8').rstrip('\r\n'))
+                lines.append(line.rstrip('\r\n'))
         except Exception as e:
             debug(e)
     return lines
@@ -61,11 +67,11 @@ def write_lines(lines, file_name, end_line='\n'):
 
 
 def read_file(file_name):
-    file_name = full_path(file_name)
     assert path_info(file_name) == 1, 'File does not exist!'
-    with open(file_name, 'rb') as f:
+    encoding = file_encoding(file_name)
+    with open(full_path(file_name), 'r', encoding=encoding) as f:
         try:
-            return f.read().decode('UTF-8')
+            return f.read()
         except Exception as e:
             debug(e)
 
@@ -81,11 +87,11 @@ def write_file(data, file_name):
 
 
 def read_json(file_name):
-    file_name = full_path(file_name)
     assert path_info(file_name) == 1, 'File does not exist!'
-    with open(file_name, 'rb') as f:
+    encoding = file_encoding(file_name)
+    with open(full_path(file_name), 'r', encoding=encoding) as f:
         try:
-            return json.loads(f.read().decode('UTF-8'))
+            return json.loads(f.read())
         except Exception as e:
             debug(e)
 
@@ -119,18 +125,16 @@ def parse(docs, lang='en'):
 
 
 def read_dir(dir_path, dir_filter=False, file_filter=False, ext_filter=None):
-    full_dir_path = full_path(dir_path)
-    assert path_info(full_dir_path) == 0, 'Folder does not exist!'
+    assert path_info(dir_path) == 0, 'Folder does not exist!'
 
     paths = []
     files = []
 
     try:
-        sorted_files = sorted(os.listdir(full_dir_path))
+        sorted_files = sorted(os.listdir(full_path(dir_path)))
         for file in sorted_files:
-            file_path = '%s/%s' % (dir_path, file)
-            full_file_path = full_path(file_path)
-            file_info = path_info(full_file_path)
+            file_path = dir_path + '/' + file
+            file_info = path_info(file_path)
             if file_info == 1:  # File
                 parts = os.path.splitext(file)
                 if not file_filter and (ext_filter is None or parts[1] not in ext_filter):
