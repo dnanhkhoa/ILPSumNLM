@@ -1288,7 +1288,7 @@ class KeyphraseReranker:
                 non_redundant_keyphrases.append(keyphrase)
 
         # Modify the keyphrase candidate dictionaries according to the clusters
-        for keyphrase in self.keyphrase_candidates.keys():
+        for keyphrase in list(self.keyphrase_candidates.keys()):
 
             # Remove candidate if not in cluster
             if keyphrase not in non_redundant_keyphrases:
