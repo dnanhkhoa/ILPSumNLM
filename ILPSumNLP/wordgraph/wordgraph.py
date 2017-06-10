@@ -110,7 +110,7 @@ import bisect
 import math
 
 import networkx as nx
-import numpy as np
+from networkx.drawing.nx_pydot import write_dot
 
 from utils import *
 
@@ -362,9 +362,7 @@ class WordGraph:
                         ambinode_overlap.append(val)
 
                         # Add the frequency of the ambiguous node
-                        ambinode_frequency.append(
-                            len(self.graph.node[(node, l)]['info'])
-                        )
+                        ambinode_frequency.append(len(self.graph.node[(node, l)]['info']))
 
                     # Search for the best candidate while avoiding a loop
                     found = False
@@ -702,8 +700,8 @@ class WordGraph:
                     if diff_i_j < 0:
                         all_diff_pos_i_j.append(-1.0 * diff_i_j)
 
-            # Add the mininum distance to diff (i.e. in case of multiple
-            # occurrencies of i or/and j in sentence s), 0 otherwise.
+            # Add the minimum distance to diff (i.e. in case of multiple
+            # occurrences of i or/and j in sentence s), 0 otherwise.
             if len(all_diff_pos_i_j) > 0:
                 diff.append(1.0 / min(all_diff_pos_i_j))
             else:
@@ -722,30 +720,31 @@ class WordGraph:
         """
 
         # Initialize the list of shortest paths
-        kshortestpaths = []
+        k_shortest_paths = []
 
         # Initializing the label container
-        orderedX = []
-        orderedX.append((0, start, 0))
+        ordered_x = [(0, start, 0)]
 
         # Initializing the path container
-        paths = {}
-        paths[(0, start, 0)] = [start]
+        paths = {
+            (0, start, 0): [start]
+        }
 
         # Initialize the visited container
-        visited = {}
-        visited[start] = 0
+        visited = {
+            start: 0
+        }
 
         # Initialize the sentence container that will be used to remove
         # duplicate sentences passing throught different nodes
         sentence_container = {}
 
         # While the number of shortest paths isn't reached or all paths explored
-        while len(kshortestpaths) < k and len(orderedX) > 0:
+        while len(k_shortest_paths) < k and len(ordered_x) > 0:
 
             # Searching for the shortest distance in orderedX
-            shortest = orderedX.pop(0)
-            shortestpath = paths[shortest]
+            shortest = ordered_x.pop(0)
+            shortest_path = paths[shortest]
 
             # Removing the shortest node from X and paths
             del paths[shortest]
@@ -754,7 +753,7 @@ class WordGraph:
             for node in self.graph.neighbors(shortest[1]):
 
                 # To avoid loops
-                if node in shortestpath:
+                if node in shortest_path:
                     continue
 
                 # Compute the weight to node
@@ -779,8 +778,8 @@ class WordGraph:
                     quotation_mark_number = 0
                     raw_sentence = ''
 
-                    for i in range(len(shortestpath) - 1):
-                        word, tag = shortestpath[i][0].split(self.sep)
+                    for i in range(len(shortest_path) - 1):
+                        word, tag = shortest_path[i][0].split(self.sep)
                         # 1.
                         if tag in self.verbs:
                             nb_verbs += 1
@@ -801,16 +800,15 @@ class WordGraph:
                     # Remove extra space from sentence
                     raw_sentence = raw_sentence.strip()
 
-                    if nb_verbs > 0 and \
-                                    length >= self.nb_words and \
-                                    paired_parentheses == 0 and \
-                                    (quotation_mark_number % 2) == 0 \
+                    if nb_verbs > 0 and length >= self.nb_words \
+                            and paired_parentheses == 0 \
+                            and (quotation_mark_number % 2) == 0 \
                             and raw_sentence not in sentence_container:
                         path = [node]
-                        path.extend(shortestpath)
+                        path.extend(shortest_path)
                         path.reverse()
                         weight = float(w)  # / float(length)
-                        kshortestpaths.append((path, weight))
+                        k_shortest_paths.append((path, weight))
                         sentence_container[raw_sentence] = 1
                 else:
 
@@ -822,14 +820,14 @@ class WordGraph:
                     _id = visited[node]
 
                     # Add the node to orderedX
-                    bisect.insort(orderedX, (w, node, _id))
+                    bisect.insort(ordered_x, (w, node, _id))
 
                     # Add the node to paths
                     paths[(w, node, _id)] = [node]
-                    paths[(w, node, _id)].extend(shortestpath)
+                    paths[(w, node, _id)].extend(shortest_path)
 
         # Returns the list of shortest paths
-        return kshortestpaths
+        return k_shortest_paths
 
     def get_compression(self, nb_candidates=50):
         """
@@ -841,37 +839,44 @@ class WordGraph:
         """
 
         # Search for the k-shortest paths in the graph
-        self.paths = self.k_shortest_paths((self.start + self.sep + self.start, 0),
-                                           (self.stop + self.sep + self.stop, 0),
-                                           nb_candidates)
+        shortest_paths = self.k_shortest_paths((self.start + self.sep + self.start, 0),
+                                               (self.stop + self.sep + self.stop, 0),
+                                               nb_candidates)
 
         # Initialize the fusion container
         fusions = []
 
         # Test if there are some paths
-        if len(self.paths) > 0:
+        if len(shortest_paths) > 0:
 
             # For nb candidates
-            for i in range(min(nb_candidates, len(self.paths))):
-                nodes = self.paths[i][0]
+            for i in range(min(nb_candidates, len(shortest_paths))):
+                nodes = shortest_paths[i][0]
                 sentence = []
 
                 for j in range(1, len(nodes) - 1):
                     word, tag = nodes[j][0].split(self.sep)
                     sentence.append((word, tag))
 
-                bisect.insort(fusions, (self.paths[i][1], sentence))
+                bisect.insort(fusions, (shortest_paths[i][1], sentence))
 
         return fusions
 
     @staticmethod
     def max_index(l):
         """ Returns the index of the maximum value of a given list. """
-        try:
-            return np.argmax(l)
-        except ValueError:
-            pass
-        return None
+        ll = len(l)
+        if ll < 0:
+            return None
+        elif ll == 1:
+            return 0
+        max_val = l[0]
+        max_ind = 0
+        for z in range(1, ll):
+            if l[z] > max_val:
+                max_val = l[z]
+                max_ind = z
+        return max_ind
 
     def compute_statistics(self):
         """
@@ -906,7 +911,7 @@ class WordGraph:
 
     def write_dot(self, dot_file):
         """ Outputs the word graph in dot format in the specified file. """
-        nx.write_dot(self.graph, dot_file)
+        write_dot(self.graph, dot_file)
 
 
 class KeyphraseReranker:
@@ -915,7 +920,7 @@ class KeyphraseReranker:
     The *KeyphraseReranker* reranks a list of compression candidates according 
     to the keyphrases they contain. Keyphrases are extracted from the set of 
     related sentences using a modified version of the TextRank method 
-    [mihalcea-tarau:2004:EMNLP]. First, an undirected weighted graph is 
+    [mihalcea-tarau:2004:EMNLP]_. First, an undirected weighted graph is 
     constructed from the set of sentences in which *nodes* are (lowercased word, 
     POS) tuples and *edges* represent co-occurrences. The TextRank algorithm is
     then applied on the graph to assign a score to each word. Second, keyphrase
@@ -937,7 +942,14 @@ class KeyphraseReranker:
        Processing (EMNLP), 2004.
     """
 
-    def __init__(self, sentence_list, nbest_compressions, lang="en", patterns=[], stopwords=[], pos_separator='/'):
+    def __init__(self, sentence_list, nbest_compressions, lang="en",
+                 patterns=None, stopwords=None, pos_separator='/'):
+
+        if patterns is None:
+            patterns = []
+
+        if stopwords is None:
+            stopwords = []
 
         self.sentences = list(sentence_list)
         """ The list of related sentences provided by the user. """
@@ -970,13 +982,13 @@ class KeyphraseReranker:
         self.keyphrase_scores = {}
         """ Scores for each keyphrase candidate. """
 
-        self.syntactic_patterns = ['^(JJ)*(NNP|NNS|NN)+$']
+        self.syntactic_patterns = ['^(JJ)*(NNP|NNS|NN|NNPS)+$']
         """ Syntactic patterns for filtering keyphrase candidates. """
 
-        # Specific rules for French
-        if self.lang == "fr":
-            self.syntactic_filter = ['NPP', 'NC', 'ADJ']
-            self.syntactic_patterns = ['^(ADJ)*(NC|NPP)+(ADJ)*$']
+        # Specific rules for Vietnamese
+        if self.lang == "vi":
+            self.syntactic_filter = ['A', 'N', 'Np']
+            self.syntactic_patterns = ['^(A)*(N|Np)+(A)*$']
 
         # Add extra patterns
         self.syntactic_patterns.extend(patterns)
@@ -988,7 +1000,7 @@ class KeyphraseReranker:
         self.generate_candidates()
 
         # 3. Compute the TextRank scores for each word in the graph
-        self.undirected_TextRank()
+        self.undirected_textrank()
 
         # 4. Compute the score of each keyphrase candidate
         self.score_keyphrase_candidates()
@@ -1030,15 +1042,14 @@ class KeyphraseReranker:
                 if sentence[j][0] in self.stopwords:
                     sentence[j] = (sentence[j][0], "STOPWORD")
 
-                    # Add the word only if it belongs to one of the syntactic
-                # categories
+                # Add the word only if it belongs to one of the syntactic categories
                 if sentence[j][1] in self.syntactic_filter:
 
                     # Add node to the graph if not exists
                     if not self.graph.has_node(sentence[j]):
                         self.graph.add_node(sentence[j])
 
-            # 2. Create the edges between the nodes using co-occurencies
+            # 2. Create the edges between the nodes using co-occurrences
             for j in range(len(sentence)):
 
                 # Get the first node
@@ -1130,7 +1141,8 @@ class KeyphraseReranker:
 
         return True
 
-    def undirected_TextRank(self, d=0.85, f_conv=0.0001):
+    def undirected_textrank(self, d=0.85, f_conv=0.0001):
+        # noinspection SpellCheckingInspection
         """
         Implementation of the TextRank algorithm as described in 
         [mihalcea-tarau:2004:EMNLP]_. Node scores are computed iteratively until
@@ -1200,6 +1212,7 @@ class KeyphraseReranker:
             self.keyphrase_scores[keyphrase] = keyphrase_score
 
     def cluster_keyphrase_candidates(self):
+        # noinspection SpellCheckingInspection
         """
         Function to cluster keyphrase candidates and remove redundancy. A large 
         number of the generated keyphrase candidates are redundant. Some 
@@ -1251,7 +1264,7 @@ class KeyphraseReranker:
         for cluster in clusters:
             # Find the best scored keyphrase candidate in the cluster
             sorted_cluster = sorted(clusters[cluster],
-                                    key=lambda cluster: self.keyphrase_scores[cluster],
+                                    key=lambda k: self.keyphrase_scores[k],
                                     reverse=True)
 
             best_candidate_keyphrases.append(sorted_cluster[0])
@@ -1261,7 +1274,7 @@ class KeyphraseReranker:
 
         # Sort best candidate by score
         sorted_keyphrases = sorted(best_candidate_keyphrases,
-                                   key=lambda keyphrase: self.keyphrase_scores[keyphrase],
+                                   key=lambda k: self.keyphrase_scores[k],
                                    reverse=True)
 
         # Last loop to remove redundancy in cluster best candidates
@@ -1274,17 +1287,17 @@ class KeyphraseReranker:
             if not is_redundant:
                 non_redundant_keyphrases.append(keyphrase)
 
-        # Modify the keyphrase candidate dictionnaries according to the clusters
+        # Modify the keyphrase candidate dictionaries according to the clusters
         for keyphrase in self.keyphrase_candidates.keys():
 
             # Remove candidate if not in cluster
-            if not keyphrase in non_redundant_keyphrases:
+            if keyphrase not in non_redundant_keyphrases:
                 del self.keyphrase_candidates[keyphrase]
                 del self.keyphrase_scores[keyphrase]
 
     def rerank_nbest_compressions(self):
         """
-        Function that reranks the nbest compressions according to the keyphrases
+        Function that reranks the n-best compressions according to the keyphrases
         they contain. The cummulative score (original score) is normalized by 
         (compression length * Sum of keyphrase scores).
         """
@@ -1307,7 +1320,6 @@ class KeyphraseReranker:
 
             score = (cummulative_score / (len(path) * total_keyphrase_score))
 
-            bisect.insort(reranked_compressions,
-                          (score, path))
+            bisect.insort(reranked_compressions, (score, path))
 
         return reranked_compressions
