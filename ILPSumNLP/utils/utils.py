@@ -1,7 +1,9 @@
 #!/usr/bin/python
 # -*- coding: utf8 -*-
 import json
+import multiprocessing
 import os
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 
 import chardet
 import gensim
@@ -9,18 +11,23 @@ import requests
 
 DEBUG = True
 
+MAX_PROCESSOR = multiprocessing.cpu_count()
+
 APP_PATH = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir))
 
 
+# OK
 def debug(*args, **kwargs):
     if DEBUG:
         print(*args, **kwargs)
 
 
+# OK
 def full_path(*rel_path):
     return os.path.join(APP_PATH, *rel_path)
 
 
+# OK
 def path_info(path):
     path = full_path(path)
     if os.path.exists(path):
@@ -31,17 +38,20 @@ def path_info(path):
     return -1
 
 
+# OK
 def make_dirs(dir_name):
     if path_info(dir_name) != 0:
         os.makedirs(full_path(dir_name))
 
 
+# OK
 def file_encoding(file_name):
     assert path_info(file_name) == 1, 'File does not exist!'
     with open(full_path(file_name), 'rb') as f:
         return chardet.detect(f.read())['encoding']
 
 
+# OK
 def read_lines(file_name):
     assert path_info(file_name) == 1, 'File does not exist!'
     lines = []
@@ -55,6 +65,7 @@ def read_lines(file_name):
     return lines
 
 
+# OK
 def write_lines(lines, file_name, end_line='\n'):
     file_name = full_path(file_name)
     make_dirs(os.path.dirname(file_name))
@@ -66,6 +77,7 @@ def write_lines(lines, file_name, end_line='\n'):
             debug(e)
 
 
+# OK
 def read_file(file_name):
     assert path_info(file_name) == 1, 'File does not exist!'
     encoding = file_encoding(file_name)
@@ -76,6 +88,7 @@ def read_file(file_name):
             debug(e)
 
 
+# OK
 def write_file(data, file_name):
     file_name = full_path(file_name)
     make_dirs(os.path.dirname(file_name))
@@ -86,6 +99,7 @@ def write_file(data, file_name):
             debug(e)
 
 
+# OK
 def read_json(file_name):
     assert path_info(file_name) == 1, 'File does not exist!'
     encoding = file_encoding(file_name)
@@ -96,6 +110,7 @@ def read_json(file_name):
             debug(e)
 
 
+# OK
 def write_json(obj, file_name):
     file_name = full_path(file_name)
     make_dirs(os.path.dirname(file_name))
@@ -106,12 +121,25 @@ def write_json(obj, file_name):
             debug(e)
 
 
+# OK
+def load_stopwords(file_name):
+    stopwords = []
+    lines = read_lines(file_name=file_name)
+    for line in lines:
+        line = line.strip()
+        if not line.startswith('#') and len(line) > 0:
+            stopwords.append(line)
+    return stopwords
+
+
+# OK
 def parse(docs, lang='en'):
     try:
         server_url = '0.0.0.0'
-        server_port = 5100 if lang == 'en' else 5105
+        server_port = 5100
         data = {
-            'text': [doc.encode('UTF-8') for doc in docs] if isinstance(docs, list) else docs.encode('UTF-8')
+            'text': [doc.encode('UTF-8') for doc in docs] if isinstance(docs, list) else docs.encode('UTF-8'),
+            'lang': lang
         }
         response = requests.post(url='http://%s:%d/handle' % (server_url, server_port), data=data)
         if response.status_code == 200:
@@ -124,6 +152,7 @@ def parse(docs, lang='en'):
     return None
 
 
+# OK
 def read_dir(dir_path, dir_filter=False, file_filter=False, ext_filter=None):
     assert path_info(dir_path) == 0, 'Folder does not exist!'
 
@@ -144,20 +173,31 @@ def read_dir(dir_path, dir_filter=False, file_filter=False, ext_filter=None):
                 if not dir_filter:
                     files.append(file)
                     paths.append(file_path)
-
     except Exception as e:
         debug(e)
-
     return files, paths
 
 
+# OK
+def pool_executor(fn, args, executor_mode=0, max_workers=None, timeout=None):
+    assert executor_mode in [0, 1, 2], 'Executor mode is invalid!'
+    debug('Running in %s mode.' % ['sequential', 'multi-threading', 'multi-processing'][executor_mode])
+    if executor_mode == 0:
+        return list(map(fn, args))
+    else:
+        executor_class = ThreadPoolExecutor if executor_mode == 1 else ProcessPoolExecutor
+        with executor_class(max_workers=max_workers) as executor:
+            return list(executor.map(fn, args, timeout=timeout))
+
+
+# OK
 def build_doc2vec_model(train_file, model_file):
     # Doc2vec parameters
     vector_size = 300
     window_size = 15
     min_count = 1
     sampling_threshold = 1e-5
-    worker_count = 20  # Number of parallel processes
+    worker_count = 40  # Number of parallel processes
     hs = 0
     dm = 0  # 0 = dbow; 1 = dmpv
     negative_size = 5
@@ -165,7 +205,10 @@ def build_doc2vec_model(train_file, model_file):
     dm_concat = 1
     num_epoch = 100
 
+    # Assign tags
     docs = gensim.models.doc2vec.TaggedLineDocument(train_file)
+
+    # Train
     model = gensim.models.Doc2Vec(docs, size=vector_size, window=window_size, min_count=min_count,
                                   sample=sampling_threshold, workers=worker_count, hs=hs, dm=dm, negative=negative_size,
                                   dbow_words=dbow_words, dm_concat=dm_concat, iter=num_epoch)
@@ -174,6 +217,7 @@ def build_doc2vec_model(train_file, model_file):
     model.save(model_file)
 
 
+# OK
 def get_d2v_vector(doc, doc2vec_model):
     start_alpha = 0.01
     infer_epoch = 1000
