@@ -110,9 +110,7 @@ import bisect
 import math
 
 import networkx as nx
-from networkx.drawing.nx_pydot import write_dot
-
-from utils import *
+import regex
 
 
 class WordGraph:
@@ -911,7 +909,7 @@ class WordGraph:
 
     def write_dot(self, dot_file):
         """ Outputs the word graph in dot format in the specified file. """
-        write_dot(self.graph, dot_file)
+        nx.drawing.nx_pydot.write_dot(self.graph, dot_file)
 
 
 class KeyphraseReranker:
@@ -945,12 +943,6 @@ class KeyphraseReranker:
     def __init__(self, sentence_list, nbest_compressions, lang="en",
                  patterns=None, stopwords=None, pos_separator='/'):
 
-        if patterns is None:
-            patterns = []
-
-        if stopwords is None:
-            stopwords = []
-
         self.sentences = list(sentence_list)
         """ The list of related sentences provided by the user. """
 
@@ -963,7 +955,7 @@ class KeyphraseReranker:
         self.lang = lang
         """ The language of the input sentences, default is English (en)."""
 
-        self.stopwords = set(stopwords)
+        self.stopwords = set([] if stopwords is None else stopwords)
         """ The set of words to be excluded from keyphrase extraction. """
 
         self.pos_separator = pos_separator
@@ -991,7 +983,7 @@ class KeyphraseReranker:
             self.syntactic_patterns = ['^(A)*(N|Np)+(A)*$']
 
         # Add extra patterns
-        self.syntactic_patterns.extend(patterns)
+        self.syntactic_patterns.extend([] if patterns is None else patterns)
 
         # 1. Build the word graph from the sentences
         self.build_graph()
