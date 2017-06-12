@@ -44,6 +44,14 @@ def num_words(s, lang='en'):
 
 
 # OK
+def remove_underscore(s):
+    s = regex.sub(r'([^ ])_([^ ])', '\g<1> \g<2>', s)
+    s = regex.sub(r'_([^ ])', '\g<1>', s)
+    s = regex.sub(r'([^ ])_', '\g<1>', s)
+    return s
+
+
+# OK
 def parse_doc(raw_doc, lang='en'):
     sentences = []
     parsed_sentences = parse(raw_doc['content'], lang)
