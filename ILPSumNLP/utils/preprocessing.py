@@ -76,10 +76,6 @@ def preprocess_duc04(dir_path, save_path):
     num_docs = 500
     num_refs = 200
 
-    # For counting
-    docs_count = 0
-    refs_count = 0
-
     content_pattern = regex.compile(r'<TEXT>(.+?)<\/TEXT>', regex.DOTALL | regex.IGNORECASE)
 
     models_dir_path = '%s/models' % save_path
@@ -116,10 +112,10 @@ def preprocess_duc04(dir_path, save_path):
                     'name': doc,
                     'content': matcher.group(1)
                 })
-                docs_count += 1
+
+                num_docs -= 1
 
         # Iterate over the models
-        ref_id = 0
         for j, ref_doc in enumerate(ref_docs):
             if cluster.lower()[:-1] in ref_doc.lower():
                 # Preprocessing
@@ -132,94 +128,84 @@ def preprocess_duc04(dir_path, save_path):
                 # Copy model file
                 shutil.copy(src=full_path(refs_path[j]), dst=full_path(models_dir_path))
 
-                ref_id += 1
-                refs_count += 1
+                num_refs -= 1
 
         data_info.append(cluster_info)
 
-    assert docs_count == num_docs, 'There should be the same number of documents in clusters'
-    assert refs_count == num_refs, 'There should be the same number of reference documents in clusters'
+    assert num_docs == 0, 'There should be the same number of documents in clusters'
+    assert num_refs == 0, 'There should be the same number of reference documents in clusters'
 
     # Write config file
     write_json(data_info, '%s/input.json' % save_path)
     make_rouge_script(data_info, 'peers', 'models', save_path)
 
 
+# OK
 def preprocess_vimds(dir_path, save_path):
     # Actual size for checking
     num_docs = 628
     num_refs = 398
 
-    # For counting
-    docs_count = 0
-    refs_count = 0
-
-    clusters_dir_path = '%s/clusters' % save_path
     models_dir_path = '%s/models' % save_path
     peers_dir_path = '%s/peers' % save_path
+    make_dirs(models_dir_path)
     make_dirs(peers_dir_path)
 
+    # For storing clusters
     data_info = []
 
     clusters, clusters_path = read_dir(dir_path, file_filter=True)
 
+    # Iterate over the clusters
     for i, cluster in enumerate(clusters):
-        cluster_name = 'cluster_%d' % (i + 1)
+        raw_docs = []
 
-        info = {
-            'cluster_name': cluster_name,
-            'original_cluster_name': cluster,
-            'docs': [],
-            'models': [],
-            'peers': [('ILPSum', str(i + 1))],
-            'save': '%s/%s' % (peers_dir_path, i + 1)
-        }
-
-        # Docs
+        # Iterate over the docs
         docs, docs_path = read_dir(clusters_path[i], dir_filter=True)
+        for j, doc in enumerate(docs):
+            if '.body.txt' in doc.lower():
+                # Preprocessing
+                raw_docs.append({
+                    'name': doc,
+                    'content': read_file(docs_path[j])
+                })
 
-        doc_id = 0
-        ref_id = 0
+                num_docs -= 1
 
+        # Iterate over the models
         for j, doc in enumerate(docs):
             doc_name = doc.lower()
-            if '.body.txt' in doc_name:  # Doc
-                file_name = '%s/cluster_%d/%d' % (clusters_dir_path, i + 1, doc_id + 1)
-                file_content = read_file(docs_path[j])
-
+            if '.ref' in doc_name and '.tok' not in doc_name:
                 # Preprocessing
-                info['docs'].append({
-                    'doc_name': str(doc_id + 1),
-                    'original_name': doc,
-                    'content': remove_invalid_chars(file_content)
+                ref_id = doc.split('.')[1][-1]
+
+                data_info.append({
+                    'name': '%s.%s' % (cluster, ref_id),
+                    'docs': raw_docs,
+                    'models': [{
+                        'name': doc.split('.')[1],
+                        'file': doc,
+                        'num_words': num_words(read_file(docs_path[j]), lang='vi')
+                    }],
+                    'peers': [{
+                        'name': 'ILPSum',
+                        'file': '%s.%s' % (cluster, ref_id)
+                    }],
+                    'save': '%s/%s.%s' % (peers_dir_path, cluster, ref_id)
                 })
 
-                write_file(' '.join(normalize_dataset(file_content, lang='vi')), file_name)
+                # Copy model file
+                shutil.copy(src=full_path(docs_path[j]), dst=full_path(models_dir_path))
 
-                doc_id += 1
-                docs_count += 1
+                num_refs -= 1
 
-            elif '.ref' in doc_name and '.tok' not in doc_name:  # Ref
-                file_name = '%s/cluster_%d/%d' % (models_dir_path, i + 1, ref_id + 1)
-                file_content = read_file(docs_path[j])
+    assert num_docs == 0, 'There should be the same number of docs in clusters'
+    assert num_refs == 0, 'There should be the same number of reference documents in clusters'
 
-                # Preprocessing
-                tokens = normalize_dataset(file_content, lang='vi')
-                write_file(' '.join(tokens), file_name)
-
-                info['models'].append({
-                    'model_name': str(ref_id + 1),
-                    'original_name': doc_name,
-                    'num_words': len(remove_punctuation(tokens))
-                })
-
-                ref_id += 1
-                refs_count += 1
-
-        data_info.append(info)
-
-    assert docs_count == num_docs, 'There should be the same number of docs in clusters'
-    assert refs_count == num_refs, 'There should be the same number of reference documents in clusters'
-
-    write_json(data_info, '%s/info.json' % save_path)
+    # Write config file
+    write_json(data_info, '%s/input.json' % save_path)
     make_rouge_script(data_info, 'peers', 'models', save_path)
+
+
+def preprocess_vimds_hcmus(dir_path, save_path):
+    pass
