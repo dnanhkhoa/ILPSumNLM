@@ -181,13 +181,14 @@ def read_dir(dir_path, dir_filter=False, file_filter=False, ext_filter=None):
 # OK
 def pool_executor(fn, args, executor_mode=0, max_workers=None, timeout=None):
     assert executor_mode in [0, 1, 2], 'Executor mode is invalid!'
-    debug('Running in %s mode.' % ['sequential', 'multi-threading', 'multi-processing'][executor_mode])
+    debug('Run %s in %s mode.' % (fn.__name__,
+                                  ['sequential', 'multi-threading', 'multi-processing'][executor_mode]))
     if executor_mode == 0:
-        return list(map(fn, args))
+        return list(map(fn, *args))
     else:
         executor_class = ThreadPoolExecutor if executor_mode == 1 else ProcessPoolExecutor
         with executor_class(max_workers=max_workers) as executor:
-            return list(executor.map(fn, args, timeout=timeout))
+            return list(executor.map(fn, *args, timeout=timeout))
 
 
 # OK
