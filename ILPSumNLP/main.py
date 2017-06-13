@@ -411,7 +411,33 @@ def compress_clusters(clusters, num_words=8, num_candidates=200, sim_threshold=0
 
 
 # OK
-def solve_ilp(clusters, num_words=100, sim_threshold=0.5):
+def reduce_cluster_size(cluster):
+    # Sort cluster by score
+    cluster = sorted(cluster, key=lambda s: s['informativeness_score'] * s['linguistic_score'], reverse=True)
+
+    size_mapping = {}
+    final_cluster = []
+
+    for sentence in cluster:
+        num_words = sentence['num_words']
+        # Keep 5 sentence with the same size
+        if size_mapping.get(num_words, 0) < 5:
+            final_cluster.append(sentence)
+            size_mapping[num_words] = size_mapping.get(num_words, 0) + 1
+
+    return final_cluster
+
+
+# OK
+def solve_ilp(clusters, num_words=100, sim_threshold=0.5, reduce_clusters_size=False):
+    # Reduce clusters size
+    if reduce_clusters_size:
+        clusters = pool_executor(fn=reduce_cluster_size, args=[clusters], executor_mode=1)
+
+        debug('- Number of sentences in each cluster after reducing cluster size:')
+        for i, cluster in enumerate(clusters):
+            debug('-- Cluster %d: %d sentences' % (i + 1, len(cluster)))
+
     # Define problem
     ilp_problem = pulp.LpProblem("ILPSumNLP", pulp.LpMaximize)
 
@@ -483,6 +509,7 @@ def solve_ilp(clusters, num_words=100, sim_threshold=0.5):
         for j in range(len(clusters[i])):
             if ilp_vars_matrix[i][j].varValue == 1.0:
                 final_sentences.append(clusters[i][j]['sentence'])
+
     return final_sentences
 
 
