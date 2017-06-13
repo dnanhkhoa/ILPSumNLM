@@ -410,76 +410,77 @@ def compress_clusters(clusters, num_words=8, num_candidates=200, sim_threshold=0
     return compressed_clusters
 
 
-def solve_ilp(clusters, num_words=100, sim_threshold=0.5):
+def solve_ilp(clusters, nb_words=100, sim_threshold=0.5):
+    # Define problem
     ilp_problem = pulp.LpProblem("ILPSumNLP", pulp.LpMaximize)
-    ilp_vars_table = []
 
-    obj_constraint = []
-    max_length_constraint = []
+    # For storing
+    sentences = []
+    ilp_vars_matrix = []
 
+    # For creating constraint
+    obj_function = []
+    length_constraint = []
+
+    # Iterate over the clusters
     for i, cluster in enumerate(clusters):
         ilp_vars = []
-        max_sentence_constraint = []
 
+        # Iterate over the sentence in the clusters
         for j, sentence in enumerate(cluster):
-            var = pulp.LpVariable('x-%d-%d' % (i, j), cat=pulp.LpBinary)
+            var = pulp.LpVariable('var_%d_%d' % (i, j), cat=pulp.LpBinary)
+
+            # Prepare objective function
+            obj_function.append(sentence['informativeness_score'] * sentence['linguistic_score'] * var)
+
+            # Prepare constraints
+            length_constraint.append(sentence['num_words'] * var)
+
+            # Store ILP variable
             ilp_vars.append(var)
 
-            max_sentence_constraint.append(var)
-            max_length_constraint.append(sentence['num_words'] * var)
+            # Store sentence
+            sentences.append(sentence['sentence'])
 
-            obj_constraint.append(sentence['informativeness_score'] * sentence['linguistic_score'] * var)
+        # Store ILP variables
+        ilp_vars_matrix.append(ilp_vars)
 
-        ilp_vars_table.append(ilp_vars)
+        # Create constraint
+        ilp_problem += pulp.lpSum(ilp_vars) <= 1.0, 'Cluster_%d constraint' % i
 
-        ilp_problem += pulp.lpSum(max_sentence_constraint) <= 1.0
+    # Create constraint
+    ilp_problem += pulp.lpSum(length_constraint) <= nb_words, 'Length constraint'
 
-    ilp_problem += pulp.lpSum(max_length_constraint) <= num_words
-    ilp_problem += pulp.lpSum(obj_constraint)
+    # Create objective function
+    ilp_problem += pulp.lpSum(obj_function), 'Objective function'
 
+    # Compute cosine similarities
+    cosine_similarities = sentence_similarity(sentences)
+
+    # Filter similar sentence between clusters
+    pos = 0
     for i, cluster in enumerate(clusters):
+        _pos = 0
         for _i, _cluster in enumerate(clusters):
-            if i == _i:
-                continue
+            if i != _i:
+                for j, sentence in enumerate(cluster):
+                    for _j, _sentence in enumerate(_cluster):
+                        if cosine_similarities[pos + j][_pos + _j] >= sim_threshold:
+                            ilp_problem += ilp_vars_matrix[i][j] + ilp_vars_matrix[_i][_j] <= 1.0, \
+                                           'Sim(var_%d_%d,var_%d_%d) constraint' % (i, j, _i, _j)
 
-            raw_docs = []
-            for sentence in cluster:
-                raw_docs.append(normalize_word_suffix(' '.join(remove_punctuation(sentence['tokens'])), lang=LANGUAGE))
-            for sentence in _cluster:
-                raw_docs.append(normalize_word_suffix(' '.join(remove_punctuation(sentence['tokens'])), lang=LANGUAGE))
-            cosine_similarities = sentence_similarity(raw_docs)
+            _pos += len(_cluster)
+        pos += len(cluster)
 
-            k = len(cluster)
-
-            for j in range(len(cluster)):
-                for _j in range(len(_cluster)):
-                    # Compute cosine similarities
-                    if cosine_similarities[j][_j + k] >= sim_threshold:
-                        ilp_problem += ilp_vars_table[i][j] + ilp_vars_table[_i][_j] <= 1.0
-
-    # for i, cluster in enumerate(clusters):
-    #     for _i, _cluster in enumerate(clusters):
-    #         if i == _i:
-    #             continue
-    #         for j, sentence in enumerate(cluster):
-    #             for _j, _sentence in enumerate(_cluster):
-    #                 # Compute cosine similarities
-    #                 cosine_similarities = doc_similarity([
-    #                     normalize_word_suffix(' '.join(remove_punctuation(sentence['tokens'])), lang=LANGUAGE),
-    #                     normalize_word_suffix(' '.join(remove_punctuation(_sentence['tokens'])), lang=LANGUAGE)
-    #                 ])
-    #                 if cosine_similarities[0][1] >= sim_threshold:
-    #                     ilp_problem += ilp_vars_table[i][j] + ilp_vars_table[_i][_j] <= 1.0
-
+    # Maximizing objective function
     ilp_problem.solve(pulp.GLPK(msg=0))
 
+    # Create summary
     final_sentences = []
-
-    for ilp_var in ilp_problem.variables():
-        if ilp_var.varValue == 1.0:
-            i, j = ilp_var.name[2:].split('_')
-            final_sentences.append(clusters[int(i)][int(j)]['sentence'])
-
+    for i in range(len(clusters)):
+        for j in range(len(clusters[i])):
+            if ilp_vars_matrix[i][j].varValue == 1.0:
+                final_sentences.append(clusters[i][j]['sentence'])
     return final_sentences
 
 
@@ -660,7 +661,7 @@ def test2():
         debug('Done.')
 
         debug('Solving ILP...')
-        final_sentences = solve_ilp(clusters=scored_clusters, num_words=120, sim_threshold=0.5)
+        final_sentences = solve_ilp(clusters=scored_clusters, nb_words=120, sim_threshold=0.5)
         debug('Done.')
 
         debug(normalize_word_suffix(' '.join(final_sentences), lang=LANGUAGE))
