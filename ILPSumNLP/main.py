@@ -13,7 +13,7 @@ from sklearn.metrics.pairwise import cosine_similarity, euclidean_distances
 
 from utils.preprocessing import *
 from utils.utils import *
-from wordgraph import WordGraph, KeyphraseReranker
+from wordgraph import WordGraph
 
 # Configs =============================================================
 
@@ -29,7 +29,7 @@ LANGUAGE_MODEL_METHOD = ['ngram', 'rmn'][0]
 
 USE_STOPWORDS = True
 
-USE_TFIDF = True
+USE_TFIDF = False
 
 # Load stemmer model | OK
 ENGLISH_STEMMER = Stemmer.Stemmer('en') if TOKEN_TYPE == 'stemmers' else None
@@ -379,17 +379,17 @@ def compress_clusters(clusters, num_words=8, num_candidates=200, sim_threshold=0
         compresser = WordGraph(sentence_list=raw_sentences, stopwords=STOPWORDS, nb_words=num_words, lang=LANGUAGE)
 
         candidates = compresser.get_compression(nb_candidates=num_candidates)
-        reranker = KeyphraseReranker(raw_sentences, candidates, lang='en')
-        reranked_candidates = reranker.rerank_nbest_compressions()
+        # reranker = KeyphraseReranker(raw_sentences, candidates, lang='en')
+        # reranked_candidates = reranker.rerank_nbest_compressions()
 
         compressed_cluster = []
-        for score, candidate in reranked_candidates:
+        for score, candidate in candidates:
             tokens = [token[0] for token in candidate]
             sentence_length = len(remove_punctuation(tokens))
 
             compressed_cluster.append({
                 'num_words': sentence_length,  # Do not include number of punctuations in length of sentence
-                'score': score,  # Do not remove the punctuations
+                'score': score / len(tokens),  # Do not remove the punctuations
                 'sentence': ' '.join(tokens),
                 'tokens': tokens
             })
@@ -410,7 +410,8 @@ def compress_clusters(clusters, num_words=8, num_candidates=200, sim_threshold=0
     return compressed_clusters
 
 
-def solve_ilp(clusters, nb_words=100, sim_threshold=0.5):
+# OK
+def solve_ilp(clusters, num_words=100, sim_threshold=0.5):
     # Define problem
     ilp_problem = pulp.LpProblem("ILPSumNLP", pulp.LpMaximize)
 
@@ -424,6 +425,7 @@ def solve_ilp(clusters, nb_words=100, sim_threshold=0.5):
 
     # Iterate over the clusters
     for i, cluster in enumerate(clusters):
+
         ilp_vars = []
 
         # Iterate over the sentence in the clusters
@@ -449,7 +451,7 @@ def solve_ilp(clusters, nb_words=100, sim_threshold=0.5):
         ilp_problem += pulp.lpSum(ilp_vars) <= 1.0, 'Cluster_%d constraint' % i
 
     # Create constraint
-    ilp_problem += pulp.lpSum(length_constraint) <= nb_words, 'Length constraint'
+    ilp_problem += pulp.lpSum(length_constraint) <= num_words, 'Length constraint'
 
     # Create objective function
     ilp_problem += pulp.lpSum(obj_function), 'Objective function'
@@ -661,7 +663,7 @@ def test2():
         debug('Done.')
 
         debug('Solving ILP...')
-        final_sentences = solve_ilp(clusters=scored_clusters, nb_words=120, sim_threshold=0.5)
+        final_sentences = solve_ilp(clusters=scored_clusters, num_words=120, sim_threshold=0.5)
         debug('Done.')
 
         debug(normalize_word_suffix(' '.join(final_sentences), lang=LANGUAGE))
