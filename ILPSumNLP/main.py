@@ -204,7 +204,7 @@ def eval_informativeness_score(cluster):
     if len(sentences) > 0:
         # Undirected graph
         graph = nx.from_numpy_matrix(sentence_similarity(sentences))
-        informativeness_score = nx.pagerank(graph)
+        informativeness_score = nx.pagerank(graph, max_iter=1000)
         for i, sentence in enumerate(cluster):
             sentence['informativeness_score'] = informativeness_score[i]
 
@@ -295,6 +295,7 @@ def clustering_sentences(docs, cluster_threshold=1, sim_threshold=0.5, n_top_sen
     return final_clusters
 
 
+# OK
 def ordering_clusters(clusters):
     edges = []
     for i, cluster_i in enumerate(clusters):
@@ -306,7 +307,7 @@ def ordering_clusters(clusters):
             cji = 0
             for sentence_i in cluster_i:
                 for sentence_j in cluster_j:
-                    if sentence_i['doc_name'] == sentence_j['doc_name']:  # In the same document
+                    if sentence_i['name'] == sentence_j['name']:  # In the same document
                         if sentence_i['pos'] < sentence_j['pos']:  # Cluster i precedes cluster j
                             cij += 1
                         elif sentence_i['pos'] > sentence_j['pos']:  # Cluster j precedes cluster i
@@ -315,6 +316,7 @@ def ordering_clusters(clusters):
             edges.append((i, j, cij))
             edges.append((j, i, cji))
 
+    # Return if empty
     if len(edges) == 0:
         return clusters
 
@@ -336,7 +338,7 @@ def ordering_clusters(clusters):
         cluster_order.append((node, nodes[node]))
         digraph.remove_node(node)
 
-    debug('- Order:', cluster_order)
+    debug('-- Order:', cluster_order)
 
     final_clusters = []
     for i, _ in cluster_order:
@@ -345,24 +347,35 @@ def ordering_clusters(clusters):
     return final_clusters
 
 
-def remove_similar_sentences(compressed_clusters, original_clusters, sim_threshold=0.8):
+def remove_similar_sentences(compressed_cluster, original_cluster, sim_threshold=0.8):
+    sentences = []
+    for sentence in original_cluster:
+        sentences.append(normalize_word_suffix(' '.join(remove_punctuation(sentence['tokens'])), lang=LANGUAGE))
+    for sentence in compressed_cluster:
+        sentences.append(normalize_word_suffix(' '.join(remove_punctuation(sentence['tokens'])), lang=LANGUAGE))
+
+    final_cluster = []
+
+    num_original_sentences = len(original_cluster)
+
+    cosine_similarities = sentence_similarity(sentences)[num_original_sentences:, :num_original_sentences]
+
+    for i, row in enumerate(cosine_similarities):
+        if row.max() < sim_threshold:
+            final_cluster.append(compressed_cluster[i])
+
+    return final_cluster if len(final_cluster) > 0 else None
+
+
+# OK
+def remove_similar_sentences_clusters(compressed_clusters, original_clusters, sim_threshold=0.8):
+    clusters = pool_executor(fn=remove_similar_sentences,
+                             args=[compressed_clusters, original_clusters, repeat(sim_threshold)], executor_mode=1)
+
     final_clusters = []
-    for i, cluster in enumerate(original_clusters):
-        num_original_sentences = len(cluster)
-        raw_doc = []
-        for sentence in cluster:
-            raw_doc.append(normalize_word_suffix(' '.join(remove_punctuation(sentence['tokens'])), lang=LANGUAGE))
-        for sentence in compressed_clusters[i]:
-            raw_doc.append(normalize_word_suffix(' '.join(remove_punctuation(sentence['tokens'])), lang=LANGUAGE))
-
-        final_cluster = []
-        cosine_similarities = sentence_similarity(raw_doc)[num_original_sentences:, :num_original_sentences]
-        for j, row in enumerate(cosine_similarities):
-            if row.max() < sim_threshold:
-                final_cluster.append(compressed_clusters[i][j])
-
-        if len(final_cluster) > 0:
-            final_clusters.append(final_cluster)
+    for cluster in clusters:
+        if cluster is not None:
+            final_clusters.append(cluster)
 
     return final_clusters
 
@@ -401,7 +414,7 @@ def compress_clusters(clusters, num_words=8, num_candidates=200, sim_threshold=0
     for i, cluster in enumerate(compressed_clusters):
         debug('-- Cluster %d: %d sentences' % (i + 1, len(cluster)))
 
-    compressed_clusters = remove_similar_sentences(compressed_clusters, clusters, sim_threshold=sim_threshold)
+    compressed_clusters = remove_similar_sentences_clusters(compressed_clusters, clusters, sim_threshold=sim_threshold)
 
     debug('- Number of sentences in each cluster after removing similar sentences:')
     for i, cluster in enumerate(compressed_clusters):
@@ -434,9 +447,9 @@ def solve_ilp(clusters, num_words=100, sim_threshold=0.5, reduce_clusters_size=F
     if reduce_clusters_size:
         clusters = pool_executor(fn=reduce_cluster_size, args=[clusters], executor_mode=1)
 
-        debug('- Number of sentences in each cluster after reducing cluster size:')
+        debug('-- Number of sentences in each cluster after reducing cluster size:')
         for i, cluster in enumerate(clusters):
-            debug('-- Cluster %d: %d sentences' % (i + 1, len(cluster)))
+            debug('---- Cluster %d: %d sentences' % (i + 1, len(cluster)))
 
     # Define problem
     ilp_problem = pulp.LpProblem("ILPSumNLP", pulp.LpMaximize)
