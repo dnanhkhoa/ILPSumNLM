@@ -122,7 +122,7 @@ def preprocess_duc04(dir_path, save_path):
                 cluster_info['models'].append({
                     'name': ref_doc[-1],
                     'file': ref_doc,
-                    'num_words': num_words(read_file(refs_path[j]))
+                    'num_words': get_num_words(read_file(refs_path[j]))
                 })
 
                 # Copy model file
@@ -185,7 +185,7 @@ def preprocess_vimds(dir_path, save_path):
                     'models': [{
                         'name': doc.split('.')[1],
                         'file': doc,
-                        'num_words': num_words(read_file(docs_path[j]), lang='vi')
+                        'num_words': get_num_words(read_file(docs_path[j]), lang='vi')
                     }],
                     'peers': [{
                         'name': 'ILPSum',
@@ -250,7 +250,7 @@ def preprocess_vimds_hcmus(dir_path, save_path):
                 'models': [{
                     'name': ref_id,
                     'file': '%s.%s' % (cluster, ref),
-                    'num_words': num_words(read_file(refs_path[j]), lang='vi')
+                    'num_words': get_num_words(read_file(refs_path[j]), lang='vi')
                 }],
                 'peers': [{
                     'name': 'ILPSum',

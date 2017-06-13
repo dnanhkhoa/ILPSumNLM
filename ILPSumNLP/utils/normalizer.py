@@ -35,7 +35,7 @@ def normalize_special_chars(s):
 
 
 # OK
-def num_words(s, lang='en'):
+def get_num_words(s, lang='en'):
     assert isinstance(s, str) or isinstance(s, list), 'Parameter must be a string or list object!'
     if isinstance(s, list):
         s = ' '.join(s)
