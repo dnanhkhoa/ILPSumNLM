@@ -207,5 +207,66 @@ def preprocess_vimds(dir_path, save_path):
     make_rouge_script(data_info, 'peers', 'models', save_path)
 
 
+# OK
 def preprocess_vimds_hcmus(dir_path, save_path):
-    pass
+    # Actual size for checking
+    num_docs = 1955
+    num_refs = 629
+
+    models_dir_path = '%s/models' % save_path
+    peers_dir_path = '%s/peers' % save_path
+    make_dirs(models_dir_path)
+    make_dirs(peers_dir_path)
+
+    # For storing clusters
+    data_info = []
+
+    clusters, clusters_path = read_dir('%s/docs' % dir_path, file_filter=True)
+
+    # Iterate over the clusters
+    for i, cluster in enumerate(clusters):
+        raw_docs = []
+
+        # Iterate over the docs
+        docs, docs_path = read_dir(clusters_path[i], dir_filter=True)
+        for j, doc in enumerate(docs):
+            # Preprocessing
+            raw_docs.append({
+                'name': doc,
+                'content': read_file(docs_path[j])
+            })
+
+            num_docs -= 1
+
+        # Iterate over the models
+        refs, refs_path = read_dir(clusters_path[i].replace('/docs', '/models'), dir_filter=True)
+        for j, ref in enumerate(refs):
+            # Preprocessing
+            ref_id = ref.split('.')[0]
+
+            data_info.append({
+                'name': '%s.%s' % (cluster, ref_id),
+                'docs': raw_docs,
+                'models': [{
+                    'name': ref_id,
+                    'file': '%s.%s' % (cluster, ref),
+                    'num_words': num_words(read_file(refs_path[j]), lang='vi')
+                }],
+                'peers': [{
+                    'name': 'ILPSum',
+                    'file': '%s.%s' % (cluster, ref_id)
+                }],
+                'save': '%s/%s.%s' % (peers_dir_path, cluster, ref_id)
+            })
+
+            # Copy model file
+            shutil.copy(src=full_path(refs_path[j]), dst='%s/%s.%s' % (full_path(models_dir_path), cluster, ref))
+
+            num_refs -= 1
+
+    assert num_docs == 0, 'There should be the same number of docs in clusters'
+    assert num_refs == 0, 'There should be the same number of reference documents in clusters'
+
+    # Write config file
+    write_json(data_info, '%s/input.json' % save_path)
+    make_rouge_script(data_info, 'peers', 'models', save_path)
