@@ -216,25 +216,28 @@ def eval_informativeness_score_clusters(clusters):
     return pool_executor(fn=eval_informativeness_score, args=[clusters], executor_mode=1)
 
 
-def clustering_sentences(docs, cluster_threshold=1, sim_threshold=0.5, n_top_sentences=None, n_top_clusters=None):
+# OK
+def clustering_sentences(docs, cluster_threshold=0.5, sim_threshold=0.5, n_top_sentences=None, n_top_clusters=None):
+    # Number of documents in each cluster
     num_docs = len(docs)
-    debug('- Number of documents: %d' % num_docs)
+    cluster_threshold *= num_docs
+    debug('-- Number of documents: %d' % num_docs)
 
     # Determine important document
     raw_docs = []
     for doc in docs:
         raw_doc = []
         for sentence in doc:
-            raw_doc.append(' '.join(remove_punctuation(sentence['tokens'])))
+            raw_doc.append(' '.join(sentence['tokens']))
 
-        raw_docs.append(normalize_word_suffix(' '.join(raw_doc), lang=LANGUAGE))
+        raw_docs.append(' '.join(raw_doc))
 
     raw_docs.append(' '.join(raw_docs))
     # debug(json.dumps(raw_docs))  # OK
 
     # Compute cosine similarities and get index of important document
     imp_doc_idx = sentence_similarity(raw_docs)[num_docs:, :num_docs].argmax()
-    debug('- Important document: %d' % imp_doc_idx)
+    debug('-- Important document: %d' % imp_doc_idx)
 
     # Generate clusters
     clusters = []
@@ -242,7 +245,7 @@ def clustering_sentences(docs, cluster_threshold=1, sim_threshold=0.5, n_top_sen
     for sentence in docs[imp_doc_idx]:
         sentence['sim'] = 1.0
         clusters.append([sentence])
-        raw_sentences.append(normalize_word_suffix(' '.join(remove_punctuation(sentence['tokens'])), lang=LANGUAGE))
+        raw_sentences.append(' '.join(sentence['tokens']))
 
     num_clusters = len(clusters)
     debug('- Number of clusters: %d' % num_clusters)  # OK
@@ -255,8 +258,7 @@ def clustering_sentences(docs, cluster_threshold=1, sim_threshold=0.5, n_top_sen
 
         for sentence in doc:
             sentence_mapping.append(sentence)
-            raw_sentences.append(
-                normalize_word_suffix(' '.join(remove_punctuation(sentence['tokens'])), lang=LANGUAGE))
+            raw_sentences.append(' '.join(sentence['tokens']))
 
     # Compute cosine similarities and get index of cluster
     cosine_similarities = sentence_similarity(raw_sentences)[num_clusters:, :num_clusters]
@@ -288,9 +290,9 @@ def clustering_sentences(docs, cluster_threshold=1, sim_threshold=0.5, n_top_sen
         final_clusters = [cluster for i, cluster in enumerate(final_clusters) if i in cluster_indices]
 
     # debug(json.dumps(final_clusters))  # OK
-    debug('- Number of clusters after filtering: %d' % len(final_clusters))  # OK
+    debug('-- Number of clusters after filtering: %d' % len(final_clusters))  # OK
     for i, cluster in enumerate(final_clusters):
-        debug('-- Cluster %d: %d sentences' % (i + 1, len(cluster)))
+        debug('---- Cluster %d: %d sentences' % (i + 1, len(cluster)))
 
     return final_clusters
 
@@ -347,12 +349,13 @@ def ordering_clusters(clusters):
     return final_clusters
 
 
+# OK
 def remove_similar_sentences(compressed_cluster, original_cluster, sim_threshold=0.8):
     sentences = []
     for sentence in original_cluster:
-        sentences.append(normalize_word_suffix(' '.join(remove_punctuation(sentence['tokens'])), lang=LANGUAGE))
+        sentences.append(sentence['sentence'])
     for sentence in compressed_cluster:
-        sentences.append(normalize_word_suffix(' '.join(remove_punctuation(sentence['tokens'])), lang=LANGUAGE))
+        sentences.append(sentence['sentence'])
 
     final_cluster = []
 
@@ -364,7 +367,7 @@ def remove_similar_sentences(compressed_cluster, original_cluster, sim_threshold
         if row.max() < sim_threshold:
             final_cluster.append(compressed_cluster[i])
 
-    return final_cluster if len(final_cluster) > 0 else None
+    return final_cluster
 
 
 # OK
@@ -374,51 +377,50 @@ def remove_similar_sentences_clusters(compressed_clusters, original_clusters, si
 
     final_clusters = []
     for cluster in clusters:
-        if cluster is not None:
+        if len(cluster) > 0:
             final_clusters.append(cluster)
 
     return final_clusters
 
 
+# OK
 def compress_clusters(clusters, num_words=8, num_candidates=200, sim_threshold=0.8):
     compressed_clusters = []
 
     for cluster in clusters:
-        raw_sentences = []
+        sentences = []
         for sentence in cluster:
-            raw_sentences.append(
+            sentences.append(
                 ' '.join(['%s/%s' % (token, sentence['tags'][i]) for i, token in enumerate(sentence['tokens'])]))
 
-        compresser = WordGraph(sentence_list=raw_sentences, stopwords=STOPWORDS, nb_words=num_words, lang=LANGUAGE)
+        compresser = WordGraph(sentence_list=sentences, stopwords=STOPWORDS, nb_words=num_words, lang=LANGUAGE)
 
         candidates = compresser.get_compression(nb_candidates=num_candidates)
         # reranker = KeyphraseReranker(raw_sentences, candidates, lang='en')
-        # reranked_candidates = reranker.rerank_nbest_compressions()
+        # candidates = reranker.rerank_nbest_compressions()
 
         compressed_cluster = []
         for score, candidate in candidates:
             tokens = [token[0] for token in candidate]
-            sentence_length = len(remove_punctuation(tokens))
+            sentence = ' '.join(tokens)
 
             compressed_cluster.append({
-                'num_words': sentence_length,  # Do not include number of punctuations in length of sentence
-                'score': score / len(tokens),  # Do not remove the punctuations
-                'sentence': ' '.join(tokens),
-                'tokens': tokens
+                'num_words': get_num_words(sentence),
+                'score': score / len(tokens),
+                'sentence': sentence
             })
 
         compressed_clusters.append(compressed_cluster)
-        # compressed_clusters.append(sorted(compressed_cluster, key=lambda s: s['score']))
 
-    debug('- Number of sentences in each cluster:')
+    debug('-- Number of sentences in each cluster:')
     for i, cluster in enumerate(compressed_clusters):
-        debug('-- Cluster %d: %d sentences' % (i + 1, len(cluster)))
+        debug('---- Cluster %d: %d sentences' % (i + 1, len(cluster)))
 
     compressed_clusters = remove_similar_sentences_clusters(compressed_clusters, clusters, sim_threshold=sim_threshold)
 
-    debug('- Number of sentences in each cluster after removing similar sentences:')
+    debug('-- Number of sentences in each cluster after removing similar sentences:')
     for i, cluster in enumerate(compressed_clusters):
-        debug('-- Cluster %d: %d sentences' % (i + 1, len(cluster)))
+        debug('---- Cluster %d: %d sentences' % (i + 1, len(cluster)))
 
     return compressed_clusters
 
@@ -527,18 +529,13 @@ def solve_ilp(clusters, num_words=100, sim_threshold=0.5, reduce_clusters_size=F
 
 
 def main():
-    test2()
-    return
-
-    samples = read_json(full_path('../Temp/datasets/%s/info.json' % LANGUAGE))[0:1]
+    samples = read_json(full_path('../Temp/datasets/%s/input.json' % LANGUAGE))[0:1]
 
     backup = []
     start_time = timeit.default_timer()
 
     for sample in samples:
-        num_docs = len(sample['docs'])
-
-        debug('Cluster: %s (%s)' % (sample['cluster_name'], sample['original_cluster_name']))
+        debug('Cluster: %s' % sample['name'])
 
         # Prepare docs in cluster
         raw_docs = sample['docs']
@@ -548,7 +545,7 @@ def main():
 
         # Clustering sentences into clusters
         debug('Clustering sentences in documents...')
-        clusters = clustering_sentences(docs=parsed_docs, cluster_threshold=num_docs // 2, sim_threshold=0.2,
+        clusters = clustering_sentences(docs=parsed_docs, cluster_threshold=0.5, sim_threshold=0.3,
                                         n_top_sentences=None, n_top_clusters=None)
         debug('Done.')
 
@@ -556,29 +553,29 @@ def main():
         clusters = ordering_clusters(clusters=clusters)
         debug('Done.')
 
-        debug(json.dumps(clusters))
+        debug('Compressing sentences in each cluster...')
+        compressed_clusters = compress_clusters(clusters=clusters, num_words=8, num_candidates=200,
+                                                sim_threshold=0.8)
+        debug('Done.')
 
-        #     debug('Compressing sentences in each cluster...')
-        #     compressed_clusters = compress_clusters(clusters=clusters, num_words=8, max_words=35, num_candidates=200,
-        #                                             sim_threshold=0.8, simple_method=True)
-        #     debug('Done.')
-        #
-        #     # Store for other purposes
-        #     backup.append(compressed_clusters)
-        #
-        #     debug('Computing linguistic score...')
-        #     scored_clusters = eval_linguistic(clusters=compressed_clusters)
-        #     debug('Done.')
-        #
-        #     debug('Computing informativeness score...')
-        #     scored_clusters = eval_informativeness(clusters=scored_clusters)
-        #     debug('Done.')
-        #
-        #     debug('Solving ILP...')
-        #     final_sentences = solve_ilp(clusters=scored_clusters, num_words=120, sim_threshold=0.5, greedy_mode=False)
-        #     debug('Done.')
-        #
-        #     debug(normalize_word_suffix(' '.join(final_sentences), lang=LANGUAGE))
+        debug('Computing linguistic score...')
+        scored_clusters = eval_linguistic_score_clusters(compressed_clusters)
+        debug('Done.')
+
+        debug('Computing informativeness score...')
+        scored_clusters = eval_informativeness_score_clusters(scored_clusters)
+        debug('Done.')
+
+        debug('Solving ILP...')
+        final_sentences = solve_ilp(clusters=scored_clusters, num_words=120, sim_threshold=0.5)
+        debug('Done.')
+
+        summary = ' '.join(final_sentences)
+        summary = normalize_word_suffix(summary, lang=LANGUAGE)
+        summary = remove_underscore(summary)
+        summary = normalize_punctuation(summary)
+
+        debug(summary)
         #     write_file(normalize_word_suffix(' '.join(final_sentences), lang=LANGUAGE), sample['save'])
         #
         # debug('Total time: %d s' % (timeit.default_timer() - start_time))
@@ -684,7 +681,8 @@ def test2():
 
                 cluster.append({
                     'tags': tags,
-                    'tokens': tokens
+                    'tokens': tokens,
+                    'sentence': ' '.join(tokens)
                 })
 
             clusters.append(cluster)
@@ -706,8 +704,13 @@ def test2():
         final_sentences = solve_ilp(clusters=scored_clusters, num_words=120, sim_threshold=0.5)
         debug('Done.')
 
-        debug(normalize_word_suffix(' '.join(final_sentences), lang=LANGUAGE))
-        write_file(' '.join(final_sentences), '%s/%s' % (save_path, fnames[idx + i]))
+        summary = ' '.join(final_sentences)
+        summary = normalize_word_suffix(summary, lang=LANGUAGE)
+        summary = remove_underscore(summary)
+        summary = normalize_punctuation(summary)
+
+        debug(summary)
+        write_file(summary, '%s/%s' % (save_path, fnames[idx + i]))
 
 
 # OK

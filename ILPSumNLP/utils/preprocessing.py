@@ -185,7 +185,7 @@ def preprocess_vimds(dir_path, save_path):
                     'models': [{
                         'name': doc.split('.')[1],
                         'file': doc,
-                        'num_words': get_num_words(read_file(docs_path[j]), lang='vi')
+                        'num_words': get_num_words(read_file(docs_path[j]))
                     }],
                     'peers': [{
                         'name': 'ILPSum',
@@ -250,7 +250,7 @@ def preprocess_vimds_hcmus(dir_path, save_path):
                 'models': [{
                     'name': ref_id,
                     'file': '%s.%s' % (cluster, ref),
-                    'num_words': get_num_words(read_file(refs_path[j]), lang='vi')
+                    'num_words': get_num_words(read_file(refs_path[j]))
                 }],
                 'peers': [{
                     'name': 'ILPSum',

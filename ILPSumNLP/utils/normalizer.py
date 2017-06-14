@@ -35,12 +35,9 @@ def normalize_special_chars(s):
 
 
 # OK
-def get_num_words(s, lang='en'):
-    assert isinstance(s, str) or isinstance(s, list), 'Parameter must be a string or list object!'
-    if isinstance(s, list):
-        s = ' '.join(s)
-        s = normalize_word_suffix(s, lang)
-    return len(remove_punctuation(regex.split('\s+', normalize_special_chars(s))))
+def get_num_words(s):
+    s = normalize_special_chars(s)
+    return len(remove_punctuation(regex.split('\s+', s)))
 
 
 # OK
@@ -48,7 +45,21 @@ def remove_underscore(s):
     s = regex.sub(r'([^ ])_([^ ])', '\g<1> \g<2>', s)
     s = regex.sub(r'_([^ ])', '\g<1>', s)
     s = regex.sub(r'([^ ])_', '\g<1>', s)
-    return s
+    # Normalise extra white spaces
+    s = regex.sub(r'\s+', ' ', s)
+    return s.strip()
+
+
+# OK
+def normalize_punctuation(s):
+    s = regex.sub(r'\s*"\s+([^"]+)\s+"\s*', ' "\g<1>" ', s)
+    s = regex.sub(r'\s+([\)\]}])\s*', '\g<1> ', s)
+    s = regex.sub(r'\s*([\(\[{])\s+', ' \g<1>', s)
+    s = regex.sub(r'\s+([!,.:;?])\s*', '\g<1> ', s)
+    s = regex.sub(r'([!,.:;?])\s*(?=[!,.:;?\)\]}"])', '\g<1>', s)
+    # Normalise extra white spaces
+    s = regex.sub(r'\s+', ' ', s)
+    return s.strip()
 
 
 # OK
@@ -59,6 +70,7 @@ def parse_doc(raw_doc, lang='en'):
         sentences.append({
             'name': raw_doc['name'],
             'pos': pos,
+            'sentence': ' '.join(parsed_sentence['tokens']),
             'tokens': parsed_sentence['tokens'],
             'tags': ['PUNCT' if is_punctuation(token) else parsed_sentence['tags'][i] for i, token in
                      enumerate(parsed_sentence['tokens'])]
