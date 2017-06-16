@@ -529,7 +529,7 @@ def solve_ilp(clusters, num_words=100, sim_threshold=0.5, reduce_clusters_size=F
 
 
 def main():
-    samples = read_json(full_path('../Temp/datasets/%s/input.json' % LANGUAGE))[0:1]
+    samples = read_json(full_path('../Temp/datasets/%s/input.json' % LANGUAGE))
 
     backup = []
     start_time = timeit.default_timer()
@@ -545,7 +545,7 @@ def main():
 
         # Clustering sentences into clusters
         debug('Clustering sentences in documents...')
-        clusters = clustering_sentences(docs=parsed_docs, cluster_threshold=0.5, sim_threshold=0.3,
+        clusters = clustering_sentences(docs=parsed_docs, cluster_threshold=0.3, sim_threshold=0.25,
                                         n_top_sentences=None, n_top_clusters=None)
         debug('Done.')
 
@@ -574,9 +574,9 @@ def main():
         summary = normalize_word_suffix(summary, lang=LANGUAGE)
         summary = remove_underscore(summary)
         summary = normalize_punctuation(summary)
-
         debug(summary)
-        #     write_file(normalize_word_suffix(' '.join(final_sentences), lang=LANGUAGE), sample['save'])
+        write_file(summary, sample['save'])
+        # write_file(normalize_word_suffix(' '.join(final_sentences), lang=LANGUAGE), sample['save'])
         #
         # debug('Total time: %d s' % (timeit.default_timer() - start_time))
         #
@@ -585,6 +585,13 @@ def main():
 
 
 def test():
+    fnames = ['d30001t', 'd30002t', 'd30003t', 'd30005t', 'd30006t', 'd30007t', 'd30008t', 'd30010t', 'd30011t',
+              'd30015t', 'd30017t', 'd30020t', 'd30022t', 'd30024t', 'd30026t', 'd30027t', 'd30028t', 'd30029t',
+              'd30031t', 'd30033t', 'd30034t', 'd30036t', 'd30037t', 'd30038t', 'd30040t', 'd30042t', 'd30044t',
+              'd30045t', 'd30046t', 'd30047t', 'd30048t', 'd30049t', 'd30050t', 'd30051t', 'd30053t', 'd30055t',
+              'd30056t', 'd30059t', 'd31001t', 'd31008t', 'd31009t', 'd31013t', 'd31022t', 'd31026t', 'd31031t',
+              'd31032t', 'd31033t', 'd31038t', 'd31043t', 'd31050t']
+
     mapping = {
         '-lcb-': '{',
         '-rcb-': '}',
@@ -592,14 +599,13 @@ def test():
         '-rrb-': ')'
     }
     clusters_path = '/home/dnanhkhoa/Desktop/Clusters_COSINE_2004_10'
-    save_path = '/home/dnanhkhoa/Desktop/result'
+    save_path = '/home/dnanhkhoa/Desktop/result1'
     dir_names, dir_paths = read_dir(clusters_path, file_filter=True)
 
-    # dir_paths = dir_paths[0:1]
     idx = 0
 
     for i, dir_path in enumerate(dir_paths):
-        debug(i + idx + 1)
+        debug(fnames[i + idx])
         clusters = []
         file_names, file_paths = read_dir(dir_path, dir_filter=True)
         for file_path in file_paths:
@@ -626,7 +632,8 @@ def test():
 
                 cluster.append({
                     'tags': tags,
-                    'tokens': tokens
+                    'tokens': tokens,
+                    'sentence': ' '.join(tokens)
                 })
             clusters.append(cluster)
 
@@ -636,21 +643,24 @@ def test():
         debug('Done.')
 
         debug('Computing linguistic score...')
-        scored_clusters = pool_executor(fn=eval_linguistic_score, args=compressed_clusters)
+        scored_clusters = eval_linguistic_score_clusters(compressed_clusters)
         debug('Done.')
 
         debug('Computing informativeness score...')
-        scored_clusters = pool_executor(fn=eval_informativeness_score, args=scored_clusters)
+        scored_clusters = eval_informativeness_score_clusters(scored_clusters)
         debug('Done.')
-
-        print(json.dumps(scored_clusters))
 
         debug('Solving ILP...')
         final_sentences = solve_ilp(clusters=scored_clusters, num_words=120, sim_threshold=0.5)
         debug('Done.')
 
-        debug(normalize_word_suffix(' '.join(final_sentences), lang=LANGUAGE))
-        write_file(' '.join(final_sentences), '%s/%d' % (save_path, idx + i + 1))
+        summary = ' '.join(final_sentences)
+        summary = normalize_word_suffix(summary, lang=LANGUAGE)
+        summary = remove_underscore(summary)
+        summary = normalize_punctuation(summary)
+
+        debug(summary)
+        write_file(summary, '%s/%s' % (save_path, fnames[idx + i]))
 
 
 def test2():
@@ -701,7 +711,7 @@ def test2():
         debug('Done.')
 
         debug('Solving ILP...')
-        final_sentences = solve_ilp(clusters=scored_clusters, num_words=120, sim_threshold=0.5)
+        final_sentences = solve_ilp(clusters=scored_clusters, num_words=125, sim_threshold=0.5)
         debug('Done.')
 
         summary = ' '.join(final_sentences)
