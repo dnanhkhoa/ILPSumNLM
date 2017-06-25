@@ -80,4 +80,4 @@ def parse_doc(raw_doc, lang='en'):
 
 # OK
 def parse_docs(raw_docs, lang='en'):
-    return pool_executor(fn=parse_doc, args=[raw_docs, repeat(lang)], executor_mode=1)
+    return pool_executor(fn=parse_doc, args=[raw_docs, repeat(lang)], executor_mode=1 if lang == 'en' else 0)

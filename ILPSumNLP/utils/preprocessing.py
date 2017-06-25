@@ -213,6 +213,8 @@ def preprocess_vimds_hcmus(dir_path, save_path):
     num_docs = 1955
     num_refs = 629
 
+    header_pattern = regex.compile(r'cluster_\d+\s+=Einleitung=\n+', regex.DOTALL | regex.IGNORECASE)
+
     models_dir_path = '%s/models' % save_path
     peers_dir_path = '%s/peers' % save_path
     make_dirs(models_dir_path)
@@ -244,13 +246,14 @@ def preprocess_vimds_hcmus(dir_path, save_path):
             # Preprocessing
             ref_id = ref.split('.')[0]
 
+            content = header_pattern.sub('', read_file(refs_path[j]))
             data_info.append({
                 'name': '%s.%s' % (cluster, ref_id),
                 'docs': raw_docs,
                 'models': [{
                     'name': ref_id,
                     'file': '%s.%s' % (cluster, ref),
-                    'num_words': get_num_words(read_file(refs_path[j]))
+                    'num_words': get_num_words(content)
                 }],
                 'peers': [{
                     'name': 'ILPSum',
@@ -260,7 +263,7 @@ def preprocess_vimds_hcmus(dir_path, save_path):
             })
 
             # Copy model file
-            shutil.copy(src=full_path(refs_path[j]), dst='%s/%s.%s' % (full_path(models_dir_path), cluster, ref))
+            write_file(content, '%s/%s.%s' % (full_path(models_dir_path), cluster, ref))
 
             num_refs -= 1
 
