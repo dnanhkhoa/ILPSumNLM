@@ -122,6 +122,67 @@ def word2vec_similarity(d1, d2):
     return WORD2VEC_MODEL.n_similarity(s1_tokens, s2_tokens)
 
 
+def w2v(s1, s2, wordmodel):
+    """
+    Calculates the similarity between two strings
+    given a word model that gives word-word similarity.
+    The word model is supposed to hold a vocab field
+    that contains the vocabulary.
+    It must have a similarity(word1, word2) method.
+    """
+
+    if s1 == s2:
+        return 1.0
+
+    intersection = set(s1.split()) & set(s2.split())
+
+    # give 1 point per common word
+    commonwords = len(intersection)
+
+    # We want at least one common word
+    if commonwords == 0:
+        return 0
+
+    # remove common words
+    l1 = [word for word in s1.split() if word not in intersection]
+    l2 = [word for word in s2.split() if word not in intersection]
+
+    # change order depending on size
+    if len(l1) > len(l2):
+        l1, l2 = l2, l1
+
+    totalscore = 0
+
+    for t1 in l1:
+        sublist = []
+        hasitem = False
+        for i, t2 in enumerate(l2):
+            # check if POS are here
+            if len(t1.split('/')) > 1:
+                # compare same POS words
+                if t1.split('/')[1][:2] == t2.split('/')[1][:2]:
+                    if t1 in wordmodel.vocab and t2 in wordmodel.vocab:
+                        sublist.append((i, wordmodel.similarity(t1, t2)))
+                        hasitem = True
+                    # if we don't know one of the words
+                    # consider them as dissimilar
+                    else:
+                        sublist.append((i, 0))
+                else:
+                    sublist.append((i, 0))
+
+        if hasitem:
+            maxitem, subscore = max(sublist, key=itemgetter(1))
+            l2.pop(maxitem)
+            totalscore += subscore
+
+    num = float(commonwords + totalscore)
+    denum = min(len(s1.split()), len(s2.split()))
+    score = num / denum
+
+    return score
+
+
 def wmd_similarity(d1, d2):
     d1 = d1.lower()
     d2 = d2.lower()
@@ -435,8 +496,8 @@ def reduce_cluster_size(cluster):
 
     for sentence in cluster:
         num_words = sentence['num_words']
-        # Keep 5 sentence with the same size
-        if size_mapping.get(num_words, 0) < 5:
+        # Keep 3 sentence with the same size
+        if size_mapping.get(num_words, 0) < 3:
             final_cluster.append(sentence)
             size_mapping[num_words] = size_mapping.get(num_words, 0) + 1
 
@@ -529,6 +590,9 @@ def solve_ilp(clusters, num_words=100, sim_threshold=0.5, reduce_clusters_size=F
 
 
 def main():
+    test3()
+    return
+
     samples = read_json(full_path('../Temp/datasets/%s/input.json' % LANGUAGE))
 
     backup = []
@@ -723,6 +787,36 @@ def test2():
         write_file(summary, '%s/%s' % (save_path, fnames[idx + i]))
 
 
+def test3():
+    clusters_path = '/home/dnanhkhoa/Desktop/full_clusters/clusters'
+    save_path = '/home/dnanhkhoa/Desktop/debug'
+
+    mapping = {}
+    samples = read_json(full_path('../Temp/datasets/en/input.json'))
+    for sample in samples:
+        docs = []
+        for doc in sample['docs']:
+            content = regex.sub(r'\r?\n', ' ', doc['content'])
+            content = regex.sub(r'\s+', ' ', content)
+            docs.append((doc['name'], content))
+        mapping[sample['name']] = docs
+
+    file_names, file_paths = read_dir(clusters_path, dir_filter=True)
+
+    for i, file_path in enumerate(file_paths):
+        clusters_content = read_json(file_path)
+        full_clusters = []
+        for cluster in clusters_content:
+            full_cluster = []
+            for sentence in cluster:
+                for doc in mapping[file_names[i][:-4]]:
+                    if sentence in doc[1]:
+                        full_cluster.append((sentence, doc[0]))
+                        break
+            full_clusters.append(full_cluster)
+        write_json(full_clusters, save_path + '/' + file_names[i])
+
+
 # OK
 def prepare_datasets():
     debug('Preprocessing DUC 2004 dataset...')
@@ -733,9 +827,9 @@ def prepare_datasets():
     preprocess_vimds('../Datasets/Datasets/VietnameseMDS', '../Temp/datasets/vi')
     debug('Done.')
 
-    # debug('Preprocessing Vietnamese MDS - HCMUS dataset...')
-    # preprocess_vimds_hcmus('../Datasets/Datasets/VietnameseMDS-HCMUS', '../Temp/datasets/vi-hcmus')
-    # debug('Done.')
+    debug('Preprocessing Vietnamese MDS - HCMUS dataset...')
+    preprocess_vimds_hcmus('../Datasets/Datasets/VietnameseMDS-HCMUS', '../Temp/datasets/vi-hcmus')
+    debug('Done.')
 
 
 # OK
