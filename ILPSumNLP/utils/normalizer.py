@@ -25,10 +25,10 @@ def remove_punctuation(tokens):
 
 # OK
 def normalize_special_chars(s):
-    s = regex.sub(r"“|”|``|''", '"', s)
-    s = regex.sub(r'`|‘|’', "'", s)
-    s = regex.sub(r'–', '-', s)
-    s = regex.sub(r'…', '...', s)
+    # s = regex.sub(r"“|”|``|''", '"', s)
+    # s = regex.sub(r'`|‘|’', "'", s)
+    # s = regex.sub(r'–', '-', s)
+    # s = regex.sub(r'…', '...', s)
     # Normalise extra white spaces
     s = regex.sub(r'\s+', ' ', s)
     return s.strip()
