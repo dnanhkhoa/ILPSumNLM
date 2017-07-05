@@ -1,15 +1,17 @@
 #!/usr/bin/python
 # -*- coding: utf8 -*-
 import Stemmer
+import collections
 import kenlm
+import math
 import timeit
 
 import networkx as nx
 import numpy as np
 import pulp
-from pyemd import emd
+from sklearn.cluster import KMeans
 from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity, euclidean_distances
+from sklearn.metrics.pairwise import cosine_similarity
 
 from utils.preprocessing import *
 from utils.utils import *
@@ -19,11 +21,11 @@ from wordgraph import WordGraph
 
 PREPARE_DATASET = False
 
-LANGUAGE = 'en'
+LANGUAGE = 'vi'
 
 TOKEN_TYPE = ['tokens', 'stemmers'][1]
 
-SIMILARITY_METHOD = ['freq', 'w2v', 'wmd'][0]
+SIMILARITY_METHOD = ['freq', 'w2v'][0]
 
 LANGUAGE_MODEL_METHOD = ['ngram', 'rmn'][0]
 
@@ -56,12 +58,12 @@ if LANGUAGE == 'vi' or SIMILARITY_METHOD != 'freq':
 KENLM_MODEL = None
 
 if LANGUAGE_MODEL_METHOD == 'ngram':
-    KENLM_MODEL = kenlm.Model(full_path('../Resources/languagemodel/giga-%s-3gram.klm' % LANGUAGE))
+    KENLM_MODEL = kenlm.Model(full_path('../Resources/languagemodel/%s-3gram.klm' % LANGUAGE))
 
 # Load word2vec model | OK
 WORD2VEC_MODEL = None
 
-if SIMILARITY_METHOD in ['w2v', 'wmd']:
+if SIMILARITY_METHOD in ['w2v']:
     WORD2VEC_MODEL = gensim.models.KeyedVectors.load_word2vec_format('../Resources/word2vec/%s.bin' % LANGUAGE,
                                                                      binary=True)
 
@@ -122,115 +124,14 @@ def word2vec_similarity(d1, d2):
     return WORD2VEC_MODEL.n_similarity(s1_tokens, s2_tokens)
 
 
-def w2v(s1, s2, wordmodel):
-    """
-    Calculates the similarity between two strings
-    given a word model that gives word-word similarity.
-    The word model is supposed to hold a vocab field
-    that contains the vocabulary.
-    It must have a similarity(word1, word2) method.
-    """
-
-    if s1 == s2:
-        return 1.0
-
-    intersection = set(s1.split()) & set(s2.split())
-
-    # give 1 point per common word
-    commonwords = len(intersection)
-
-    # We want at least one common word
-    if commonwords == 0:
-        return 0
-
-    # remove common words
-    l1 = [word for word in s1.split() if word not in intersection]
-    l2 = [word for word in s2.split() if word not in intersection]
-
-    # change order depending on size
-    if len(l1) > len(l2):
-        l1, l2 = l2, l1
-
-    totalscore = 0
-
-    for t1 in l1:
-        sublist = []
-        hasitem = False
-        for i, t2 in enumerate(l2):
-            # check if POS are here
-            if len(t1.split('/')) > 1:
-                # compare same POS words
-                if t1.split('/')[1][:2] == t2.split('/')[1][:2]:
-                    if t1 in wordmodel.vocab and t2 in wordmodel.vocab:
-                        sublist.append((i, wordmodel.similarity(t1, t2)))
-                        hasitem = True
-                    # if we don't know one of the words
-                    # consider them as dissimilar
-                    else:
-                        sublist.append((i, 0))
-                else:
-                    sublist.append((i, 0))
-
-        if hasitem:
-            maxitem, subscore = max(sublist, key=itemgetter(1))
-            l2.pop(maxitem)
-            totalscore += subscore
-
-    num = float(commonwords + totalscore)
-    denum = min(len(s1.split()), len(s2.split()))
-    score = num / denum
-
-    return score
-
-
-def wmd_similarity(d1, d2):
-    d1 = d1.lower()
-    d2 = d2.lower()
-
-    if d1 == d2:
-        return 1.0
-
-    s1_tokens = d1.split(' ')
-    s2_tokens = d2.split(' ')
-    s1_filtered_tokens = set(s1_tokens)
-    s2_filtered_tokens = set(s2_tokens)
-
-    vocab = [word for word in (s1_filtered_tokens | s2_filtered_tokens) if
-             word in WORD2VEC_MODEL.vocab and word not in STOPWORDS]
-
-    if len(vocab) == 0:
-        return 0.0
-
-    vectorizer = VECTORIZER(vocabulary=vocab).fit([d1, d2])
-    W_ = np.array([WORD2VEC_MODEL[word] for word in vectorizer.get_feature_names() if word in WORD2VEC_MODEL])
-    D_ = euclidean_distances(W_)
-    D_ = D_.astype(np.double)
-    D_ /= D_.max()
-
-    v_1, v_2 = vectorizer.transform([d1, d2])
-    v_1 = v_1.toarray().ravel()
-    v_2 = v_2.toarray().ravel()
-
-    v_1 = v_1.astype(np.double)
-    v_2 = v_2.astype(np.double)
-    v_1 /= v_1.sum()
-    v_2 /= v_2.sum()
-
-    return 1.0 - emd(v_1, v_2, D_)
-
-
-def sentence_similarity(docs, method=SIMILARITY_METHOD, stopwords=STOPWORDS):
+# OK
+def sentence_similarity(docs, method=SIMILARITY_METHOD):
     size = len(docs)
     if method == 'w2v':
         cosine_similarities = np.ones((size, size))
         for i in range(0, size - 1):
             for j in range(i + 1, size):
                 cosine_similarities[i][j] = cosine_similarities[j][i] = word2vec_similarity(docs[i], docs[j])
-    elif method == 'wmd':
-        cosine_similarities = np.ones((size, size))
-        for i in range(0, size - 1):
-            for j in range(i + 1, size):
-                cosine_similarities[i][j] = cosine_similarities[j][i] = wmd_similarity(docs[i], docs[j])
     else:
         vectorizer = VECTORIZER(min_df=0, stop_words=STOPWORDS)
         matrix = vectorizer.fit_transform(docs)
@@ -278,7 +179,8 @@ def eval_informativeness_score_clusters(clusters):
 
 
 # OK
-def clustering_sentences(docs, cluster_threshold=0.5, sim_threshold=0.5, n_top_sentences=None, n_top_clusters=None):
+def clustering_sentences(docs, cluster_threshold=0.5, sim_threshold=0.5, n_top_sentences=None, n_top_clusters=None,
+                         use_kmeans=False, num_clusters=8):
     # Number of documents in each cluster
     num_docs = len(docs)
     cluster_threshold *= num_docs
@@ -303,10 +205,45 @@ def clustering_sentences(docs, cluster_threshold=0.5, sim_threshold=0.5, n_top_s
     # Generate clusters
     clusters = []
     raw_sentences = []
-    for sentence in docs[imp_doc_idx]:
-        sentence['sim'] = 1.0
-        clusters.append([sentence])
-        raw_sentences.append(' '.join(sentence['tokens']))
+
+    if use_kmeans:
+        kmeans_sentences = []
+        for sentence in docs[imp_doc_idx]:
+            kmeans_sentences.append(' '.join(sentence['tokens']))
+
+        # Clustering sentences in important document
+        vectorizer = VECTORIZER(min_df=0, stop_words=STOPWORDS)
+        matrix = vectorizer.fit_transform(kmeans_sentences)
+        kmeans = KMeans(n_clusters=min(num_clusters, len(kmeans_sentences)))
+        kmeans.fit(matrix)
+
+        imp_cluster_indices = []
+        cosine_similarities = cosine_similarity(kmeans.cluster_centers_, matrix)
+        for row in cosine_similarities:
+            imp_cluster_indices.append(row.argmax())
+
+        kmeans_clusters = collections.defaultdict(list)
+
+        # Cluster id
+        for i, label in enumerate(kmeans.labels_):
+            kmeans_clusters[label].append(i)
+
+        for v in kmeans_clusters.values():
+            sentences = []
+            for idx in set(v) & set(imp_cluster_indices):
+                raw_sentences.append(' '.join(docs[imp_doc_idx][idx]['tokens']))
+                break
+
+            for idx in v:
+                sentence = docs[imp_doc_idx][idx]
+                sentence['sim'] = 1.0
+                sentences.append(sentence)
+            clusters.append(sentences)
+    else:
+        for sentence in docs[imp_doc_idx]:
+            sentence['sim'] = 1.0
+            clusters.append([sentence])
+            raw_sentences.append(' '.join(sentence['tokens']))
 
     num_clusters = len(clusters)
     debug('- Number of clusters: %d' % num_clusters)  # OK
@@ -340,7 +277,7 @@ def clustering_sentences(docs, cluster_threshold=0.5, sim_threshold=0.5, n_top_s
 
     final_clusters = []
     for cluster in ordered_clusters:
-        if len(cluster) >= cluster_threshold:
+        if len(cluster) >= int(cluster_threshold):
             final_clusters.append(cluster)
 
     if n_top_clusters is not None:
@@ -420,13 +357,14 @@ def remove_similar_sentences(compressed_cluster, original_cluster, sim_threshold
 
     final_cluster = []
 
-    num_original_sentences = len(original_cluster)
+    if len(sentences) > 0:
+        num_original_sentences = len(original_cluster)
 
-    cosine_similarities = sentence_similarity(sentences)[num_original_sentences:, :num_original_sentences]
+        cosine_similarities = sentence_similarity(sentences)[num_original_sentences:, :num_original_sentences]
 
-    for i, row in enumerate(cosine_similarities):
-        if row.max() < sim_threshold:
-            final_cluster.append(compressed_cluster[i])
+        for i, row in enumerate(cosine_similarities):
+            if row.max() < sim_threshold:
+                final_cluster.append(compressed_cluster[i])
 
     return final_cluster
 
@@ -471,7 +409,8 @@ def compress_clusters(clusters, num_words=8, num_candidates=200, sim_threshold=0
                 'sentence': sentence
             })
 
-        compressed_clusters.append(compressed_cluster)
+        if len(compressed_cluster) > 0:
+            compressed_clusters.append(compressed_cluster)
 
     debug('-- Number of sentences in each cluster:')
     for i, cluster in enumerate(compressed_clusters):
@@ -487,7 +426,7 @@ def compress_clusters(clusters, num_words=8, num_candidates=200, sim_threshold=0
 
 
 # OK
-def reduce_cluster_size(cluster):
+def reduce_cluster_size(cluster, keep_num=3):
     # Sort cluster by score
     cluster = sorted(cluster, key=lambda s: s['informativeness_score'] * s['linguistic_score'], reverse=True)
 
@@ -496,8 +435,8 @@ def reduce_cluster_size(cluster):
 
     for sentence in cluster:
         num_words = sentence['num_words']
-        # Keep 3 sentence with the same size
-        if size_mapping.get(num_words, 0) < 3:
+        # Keep keep_num sentence with the same size
+        if size_mapping.get(num_words, 0) < keep_num:
             final_cluster.append(sentence)
             size_mapping[num_words] = size_mapping.get(num_words, 0) + 1
 
@@ -505,10 +444,10 @@ def reduce_cluster_size(cluster):
 
 
 # OK
-def solve_ilp(clusters, num_words=100, sim_threshold=0.5, reduce_clusters_size=False):
+def solve_ilp(clusters, num_words=100, sim_threshold=0.5, reduce_clusters_size=False, keep_num=3):
     # Reduce clusters size
     if reduce_clusters_size:
-        clusters = pool_executor(fn=reduce_cluster_size, args=[clusters], executor_mode=1)
+        clusters = pool_executor(fn=reduce_cluster_size, args=[clusters, repeat(keep_num)], executor_mode=1)
 
         debug('-- Number of sentences in each cluster after reducing cluster size:')
         for i, cluster in enumerate(clusters):
@@ -589,28 +528,37 @@ def solve_ilp(clusters, num_words=100, sim_threshold=0.5, reduce_clusters_size=F
     return final_sentences
 
 
-def main():
-    test3()
-    return
+# OK
+def eval_size(num_words):
+    return int(math.ceil((1. + num_words) / 10) * 10)
 
+
+def main():
     samples = read_json(full_path('../Temp/datasets/%s/input.json' % LANGUAGE))
 
-    backup = []
     start_time = timeit.default_timer()
 
-    for sample in samples:
-        debug('Cluster: %s' % sample['name'])
+    # samples = samples[537:]
+
+    for i, sample in enumerate(samples):
+        debug('Cluster_%d: %s' % (i, sample['name']))
 
         # Prepare docs in cluster
         raw_docs = sample['docs']
+
+        # Normalize special chars
+        for raw_doc in raw_docs:
+            raw_doc['content'] = normalize_special_chars(raw_doc['content'])
+
         debug('Parsing documents...')
         parsed_docs = parse_docs(raw_docs=raw_docs, lang=LANGUAGE)
         debug('Done.')
 
         # Clustering sentences into clusters
         debug('Clustering sentences in documents...')
-        clusters = clustering_sentences(docs=parsed_docs, cluster_threshold=0.3, sim_threshold=0.25,
-                                        n_top_sentences=None, n_top_clusters=None)
+        clusters = clustering_sentences(docs=parsed_docs, cluster_threshold=0.5, sim_threshold=0.15,
+                                        n_top_sentences=None, n_top_clusters=None, use_kmeans=True, num_clusters=15)
+
         debug('Done.')
 
         debug('Ordering clusters...')
@@ -619,7 +567,7 @@ def main():
 
         debug('Compressing sentences in each cluster...')
         compressed_clusters = compress_clusters(clusters=clusters, num_words=8, num_candidates=200,
-                                                sim_threshold=0.8)
+                                                sim_threshold=0.9)
         debug('Done.')
 
         debug('Computing linguistic score...')
@@ -631,7 +579,11 @@ def main():
         debug('Done.')
 
         debug('Solving ILP...')
-        final_sentences = solve_ilp(clusters=scored_clusters, num_words=120, sim_threshold=0.5)
+        # final_sentences = solve_ilp(clusters=scored_clusters, num_words=125, sim_threshold=0.5,
+        #                             reduce_clusters_size=False)
+
+        final_sentences = solve_ilp(clusters=scored_clusters, num_words=eval_size(sample['models'][0]['num_words']),
+                                    sim_threshold=0.5, reduce_clusters_size=False)
         debug('Done.')
 
         summary = ' '.join(final_sentences)
@@ -640,15 +592,14 @@ def main():
         summary = normalize_punctuation(summary)
         debug(summary)
         write_file(summary, sample['save'])
-        # write_file(normalize_word_suffix(' '.join(final_sentences), lang=LANGUAGE), sample['save'])
-        #
-        # debug('Total time: %d s' % (timeit.default_timer() - start_time))
-        #
-        # # Backup
-        # write_json(backup, '../Temp/datasets/%s/backup-%s.json' % (LANGUAGE, datetime.now().strftime('%Y-%m-%d-%H-%M-%S')))
+
+        debug('Time checking: %d s' % (timeit.default_timer() - start_time))
+
+    debug('Total time: %d s' % (timeit.default_timer() - start_time))
 
 
-def test():
+# DEBUG 1
+def debug_1():
     fnames = ['d30001t', 'd30002t', 'd30003t', 'd30005t', 'd30006t', 'd30007t', 'd30008t', 'd30010t', 'd30011t',
               'd30015t', 'd30017t', 'd30020t', 'd30022t', 'd30024t', 'd30026t', 'd30027t', 'd30028t', 'd30029t',
               'd30031t', 'd30033t', 'd30034t', 'd30036t', 'd30037t', 'd30038t', 'd30040t', 'd30042t', 'd30044t',
@@ -656,99 +607,22 @@ def test():
               'd30056t', 'd30059t', 'd31001t', 'd31008t', 'd31009t', 'd31013t', 'd31022t', 'd31026t', 'd31031t',
               'd31032t', 'd31033t', 'd31038t', 'd31043t', 'd31050t']
 
-    mapping = {
-        '-lcb-': '{',
-        '-rcb-': '}',
-        '-lrb-': '(',
-        '-rrb-': ')'
-    }
-    clusters_path = '/home/dnanhkhoa/Desktop/Clusters_COSINE_2004_10'
-    save_path = '/home/dnanhkhoa/Desktop/result1'
-    dir_names, dir_paths = read_dir(clusters_path, file_filter=True)
-
-    idx = 0
-
-    for i, dir_path in enumerate(dir_paths):
-        debug(fnames[i + idx])
-        clusters = []
-        file_names, file_paths = read_dir(dir_path, dir_filter=True)
-        for file_path in file_paths:
-            cluster = []
-            cluster_content = read_lines(file_path)
-            for sentence in cluster_content:
-                tokens = []
-                tags = []
-
-                token_list = sentence.strip().split(' ')
-                for item in token_list:
-                    m = regex.match("^(.+)/(.+)$", item)
-                    token, tag = m.group(1), m.group(2)
-
-                    token = token.lower()
-                    if token in mapping:
-                        token = mapping[token]
-
-                    if is_punctuation(token):
-                        tag = 'PUNCT'
-
-                    tokens.append(token)
-                    tags.append(tag)
-
-                cluster.append({
-                    'tags': tags,
-                    'tokens': tokens,
-                    'sentence': ' '.join(tokens)
-                })
-            clusters.append(cluster)
-
-        debug('Compressing sentences in each cluster...')
-        compressed_clusters = compress_clusters(clusters=clusters, num_words=8, num_candidates=200,
-                                                sim_threshold=0.8)
-        debug('Done.')
-
-        debug('Computing linguistic score...')
-        scored_clusters = eval_linguistic_score_clusters(compressed_clusters)
-        debug('Done.')
-
-        debug('Computing informativeness score...')
-        scored_clusters = eval_informativeness_score_clusters(scored_clusters)
-        debug('Done.')
-
-        debug('Solving ILP...')
-        final_sentences = solve_ilp(clusters=scored_clusters, num_words=120, sim_threshold=0.5)
-        debug('Done.')
-
-        summary = ' '.join(final_sentences)
-        summary = normalize_word_suffix(summary, lang=LANGUAGE)
-        summary = remove_underscore(summary)
-        summary = normalize_punctuation(summary)
-
-        debug(summary)
-        write_file(summary, '%s/%s' % (save_path, fnames[idx + i]))
-
-
-def test2():
-    fnames = ['d30001t', 'd30002t', 'd30003t', 'd30005t', 'd30006t', 'd30007t', 'd30008t', 'd30010t', 'd30011t',
-              'd30015t', 'd30017t', 'd30020t', 'd30022t', 'd30024t', 'd30026t', 'd30027t', 'd30028t', 'd30029t',
-              'd30031t', 'd30033t', 'd30034t', 'd30036t', 'd30037t', 'd30038t', 'd30040t', 'd30042t', 'd30044t',
-              'd30045t', 'd30046t', 'd30047t', 'd30048t', 'd30049t', 'd30050t', 'd30051t', 'd30053t', 'd30055t',
-              'd30056t', 'd30059t', 'd31001t', 'd31008t', 'd31009t', 'd31013t', 'd31022t', 'd31026t', 'd31031t',
-              'd31032t', 'd31033t', 'd31038t', 'd31043t', 'd31050t']
-
-    clusters_path = '/home/dnanhkhoa/Desktop/clusters'
-    save_path = '/home/dnanhkhoa/Desktop/result'
+    clusters_path = '../Temp/debug/clusters_2'
+    save_path = '../Temp/debug/debug_2'
     file_names, file_paths = read_dir(clusters_path, dir_filter=True)
 
     idx = 0
+
+    start_time = timeit.default_timer()
 
     for i, file_path in enumerate(file_paths):
         clusters_content = read_json(file_path)
 
         clusters = []
 
-        for clusterx in clusters_content:
+        for _clusters in clusters_content:
             cluster = []
-            for sentence in clusterx:
+            for sentence in _clusters:
                 parsed = parse(sentence)
                 tags = ['PUNCT' if is_punctuation(x) else x for x in parsed[0]['tags']]
                 tokens = [x.lower() for x in parsed[0]['tokens']]
@@ -775,7 +649,8 @@ def test2():
         debug('Done.')
 
         debug('Solving ILP...')
-        final_sentences = solve_ilp(clusters=scored_clusters, num_words=125, sim_threshold=0.5)
+        final_sentences = solve_ilp(clusters=scored_clusters, num_words=125, sim_threshold=0.5,
+                                    reduce_clusters_size=True)
         debug('Done.')
 
         summary = ' '.join(final_sentences)
@@ -786,13 +661,17 @@ def test2():
         debug(summary)
         write_file(summary, '%s/%s' % (save_path, fnames[idx + i]))
 
+    debug('Total time: %d s' % (timeit.default_timer() - start_time))
 
-def test3():
-    clusters_path = '/home/dnanhkhoa/Desktop/full_clusters/clusters'
-    save_path = '/home/dnanhkhoa/Desktop/debug'
+
+# DEBUG 2
+def debug_2():
+    dataset_name = 'en'
+    clusters_path = '../Temp/debug/clusters_2'
+    save_path = '../Temp/debug/debug_2'
 
     mapping = {}
-    samples = read_json(full_path('../Temp/datasets/en/input.json'))
+    samples = read_json(full_path('../Temp/datasets/%s/input.json' % dataset_name))
     for sample in samples:
         docs = []
         for doc in sample['docs']:
@@ -802,7 +681,6 @@ def test3():
         mapping[sample['name']] = docs
 
     file_names, file_paths = read_dir(clusters_path, dir_filter=True)
-
     for i, file_path in enumerate(file_paths):
         clusters_content = read_json(file_path)
         full_clusters = []
