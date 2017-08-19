@@ -556,7 +556,7 @@ def main():
 
         # Clustering sentences into clusters
         debug('Clustering sentences in documents...')
-        clusters = clustering_sentences(docs=parsed_docs, cluster_threshold=0.5, sim_threshold=0.15,
+        clusters = clustering_sentences(docs=parsed_docs, cluster_threshold=0.5, sim_threshold=0.12,
                                         n_top_sentences=None, n_top_clusters=None, use_kmeans=True, num_clusters=15)
 
         debug('Done.')
